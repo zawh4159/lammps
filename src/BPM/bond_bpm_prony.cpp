@@ -36,14 +36,12 @@ using namespace LAMMPS_NS;
 /* ---------------------------------------------------------------------- */
 
 BondBPMProny::BondBPMProny(LAMMPS *_lmp) :
-    BondBPM(_lmp), k0(nullptr), ecrit(nullptr), gamma(nullptr), lamc(nullptr), eplastic(nullptr), 
+    BondBPM(_lmp), k0(nullptr), ecrit(nullptr), gamma(nullptr), 
     aT(nullptr), aT_temp(nullptr), id_fix_property_bond(nullptr)
 {
   partial_flag = 1;
   smooth_flag = 1;
   normalize_flag = 0;
-  nonlinear_flag = 0;
-  plastic_flag = 0;
   temperature_flag = 0;
   writedata = 0;
 
@@ -56,8 +54,6 @@ BondBPMProny::BondBPMProny(LAMMPS *_lmp) :
 
   single_extra = 4;
   svector = new double[4];
-
-  nmax = 0;
 
   comm_forward = 1;
   comm_reverse = 1;
@@ -84,8 +80,6 @@ BondBPMProny::~BondBPMProny()
     memory->destroy(k0);
     memory->destroy(ecrit);
     memory->destroy(gamma);
-    memory->destroy(lamc);
-    memory->destroy(eplastic);
     memory->destroy(aT);
     memory->destroy(aT_temp);
   }
@@ -123,7 +117,7 @@ double BondBPMProny::store_bond(int n, int i, int j)
       if (atom->bond_atom[i][m] == tag[j]) { 
         fix_bond_history->update_atom_value(i, m, 0, r); // r0
         fix_bond_history->update_atom_value(i, m, 1, r); // rn
-        fix_bond_history->update_atom_value(i, m, 2, 0); // ep
+        fix_bond_history->update_atom_value(i, m, 2, 0); // reserved for future use
         
         type = bond_type[i][m];
         const Table *tb = &tables[tabindex[type]];
@@ -150,7 +144,7 @@ double BondBPMProny::store_bond(int n, int i, int j)
       if (atom->bond_atom[j][m] == tag[i]) { 
         fix_bond_history->update_atom_value(j, m, 0, r); //r0
         fix_bond_history->update_atom_value(j, m, 1, r); //rn
-        fix_bond_history->update_atom_value(j, m, 2, 0); //ep
+        fix_bond_history->update_atom_value(j, m, 2, 0); //reserved for future use
 
         type = bond_type[j][m];
         const Table *tb = &tables[tabindex[type]];
@@ -210,12 +204,12 @@ void BondBPMProny::store_data()
       delz = x[i][2] - x[j][2];
 
       // Get closest image in case bonded with ghost
-      domain->minimum_image(delx, dely, delz);
+      domain->minimum_image(FLERR,delx, dely, delz);
       r = sqrt(delx * delx + dely * dely + delz * delz);
 
-      fix_bond_history->update_atom_value(i, m, 0, r);
-      fix_bond_history->update_atom_value(i, m, 1, r);
-      fix_bond_history->update_atom_value(i, m, 2, 0);
+      fix_bond_history->update_atom_value(i, m, 0, r); // r0
+      fix_bond_history->update_atom_value(i, m, 1, r); // rn
+      fix_bond_history->update_atom_value(i, m, 2, 0); // reserved for use
 
       bondstore[m][0] = r;
       bondstore[m][1] = r;
@@ -263,7 +257,7 @@ void BondBPMProny::compute(int eflag, int vflag)
 
   int i1, i2, itmp, n, m, type;
   double delx, dely, delz, delvx, delvy, delvz;
-  double e, ep, rsq, r, r0, rn , r0p, rc , rinv,  smooth, fbond, dot;
+  double e, rsq, r, r0, rn , rinv,  smooth, fbond, dot;
   double k_temp, eta_temp, exp_j, Hn, term1, term2, term3;
 
   ev_init(eflag, vflag);
@@ -328,7 +322,6 @@ void BondBPMProny::compute(int eflag, int vflag)
     e = (r0 !=0.0) ? (r - r0) / r0 : 0.0;
 
     rn = bondstore[n][1]; // This needs to be after bonds have been initialized
-    ep = bondstore[n][2];
    
     // update bond length in bondstore
     bondstore[n][1] = r;
@@ -340,38 +333,12 @@ void BondBPMProny::compute(int eflag, int vflag)
       continue;
     }
 
-    //plastic calculations
-    if (plastic_flag) {
-      if (e > (ep + eplastic[type])) {
-        ep = e - eplastic[type];
-        bondstore[n][2] = ep;
-      }
-
-      if (e < (ep - eplastic[type])) {
-        ep = e + eplastic[type];
-        bondstore[n][2] = ep;
-      }
-
-      r0p = (1.0 + ep) * r0;
-      bondstore[n][2] = ep;
-    } else {
-      r0p = r0;
-    }
-
     // rate-independent part of bond force
     rinv = 1.0 / r;
     if (normalize_flag) {
-      fbond = -k0[type] * (e - ep);
-    } else if (nonlinear_flag) {
-      if (r > r0p) {
-        rc = r0p * lamc[type]; // if bond is in tension
-      } else {
-        rc = 0; // if bond is in compression
-      }
-      double lam = (r - r0p) / (rc - r0p);
-      fbond = -k0[type] * (r - r0p) / ( 2 * (1 - (lam * lam)));
+      fbond = -k0[type] * e;
     } else {
-      fbond = k0[type] * (r0p - r);
+      fbond = k0[type] * (r0 - r);
     }
 
     // rate-dependent part of bond force
@@ -444,8 +411,6 @@ void BondBPMProny::allocate()
   memory->create(k0, np1, "bond:k0");
   memory->create(ecrit, np1, "bond:ecrit");
   memory->create(gamma, np1, "bond:gamma");
-  memory->create(lamc,np1,"bond:lamc");
-  memory->create(eplastic,np1,"bond:eplastic");
   memory->create(aT,np1,"bond:aT"); 
   memory->create(aT_temp,np1,"bond:aT_temp");
   memory->create(tabindex, np1, "bond:tabindex");
@@ -461,7 +426,7 @@ void BondBPMProny::allocate()
 
 void BondBPMProny::coeff(int narg, char **arg)
 {
-  if (!(narg >= 8)) error->all(FLERR, "Incorrect args for bond coefficients");
+  if (narg < 6) error->all(FLERR, "Incorrect args for bond coefficients");
   if (!allocated) allocate();
 
   int ilo, ihi;
@@ -477,21 +442,18 @@ void BondBPMProny::coeff(int narg, char **arg)
   if (comm->me == 0) read_table(tb, arg[4], arg[5]);
   bcast_table(tb);
 
-  double lamc_one = utils::numeric(FLERR, arg[6], false, lmp);
-  double eplastic_one = utils::numeric(FLERR, arg[7], false, lmp);
+  //defaults
   double aT_one = 1; 
 
-  if ((nonlinear_flag) && (lamc_one <= 1)) {
-    error->all(FLERR, "Incorrect bond coefficient maximum extension must be greater than one");
-  }
-
   // Parse optional remaining arguments
-  int iarg = 8;
+  int iarg = 6;
   if (temperature_flag) {
-    if (iarg+1 > narg)  error->all(FLERR,"Incorrect args for bond coefficients");
-    aT_one = utils::numeric(FLERR, arg[8], false, lmp);
-    iarg += 1;
-  } 
+    if (iarg+1 != narg)  error->all(FLERR,"Incorrect args for bond coefficients");
+    aT_one = utils::numeric(FLERR, arg[iarg], false, lmp);
+    if (aT_one <= 0) error->all(FLERR,"Temperature shift coefficient must be postive nonzero");
+  } else {
+    if (iarg != narg) error->all(FLERR,"Incorrect args for bond coefficients");
+  }
 
 
   int count = 0;
@@ -499,16 +461,12 @@ void BondBPMProny::coeff(int narg, char **arg)
     k0[i] = k_zero;
     ecrit[i] = ecrit_one;
     gamma[i] = gamma_one;
-    lamc[i] = lamc_one;
-    eplastic[i] = eplastic_one;
     aT[i] = aT_one;
     aT_temp[i] = aT_one;
     setflag[i] = 1;
     tabindex[i] = ntables;
     
     count++;
-
-    if (1.0 + ecrit[i] > max_stretch) max_stretch = 1.0 + ecrit[i];
   }
    ntables++;
 
@@ -548,14 +506,6 @@ void BondBPMProny::settings(int narg, char **arg)
       if (iarg + 1 > narg) error->all(FLERR, "Illegal bond bpm command, missing option for normalize");
       normalize_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
       i += 1;
-    }  else if (strcmp(arg[iarg], "plastic") == 0) {
-      if (iarg + 1 > narg) error->all(FLERR, "Illegal bond bpm command, missing option for plastic");
-      plastic_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
-      i += 1;
-    } else if (strcmp(arg[iarg], "nonlinear") == 0) {
-      if (iarg + 1 > narg) error->all(FLERR, "Illegal bond bpm command, missing option for nonlinear");
-      nonlinear_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
-      i += 1;
     } else if (strcmp(arg[iarg], "temp/shift") == 0) {
       if (iarg + 1 > narg) error->all(FLERR, "Illegal bond bpm command, missing option for temp/shift");
       temperature_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
@@ -571,9 +521,6 @@ void BondBPMProny::settings(int narg, char **arg)
   if (smooth_flag && !break_flag)
     error->all(FLERR, "Illegal bond bpm command, must turn off smoothing with break no option");
 
-  if (nonlinear_flag && !break_flag)
-    error->all(FLERR, "Illegal bond bpm command, must turn on breaking with nonlinear yes option");
-
 }
 
 /* ----------------------------------------------------------------------
@@ -588,8 +535,6 @@ void BondBPMProny::write_restart(FILE *fp)
   fwrite(&k0[1], sizeof(double), atom->nbondtypes, fp);
   fwrite(&ecrit[1], sizeof(double), atom->nbondtypes, fp);
   fwrite(&gamma[1], sizeof(double), atom->nbondtypes, fp);
-  fwrite(&lamc[1], sizeof(double), atom->nbondtypes, fp);
-  fwrite(&eplastic[1], sizeof(double), atom->nbondtypes, fp);
 
   fwrite(&tabstyle, sizeof(int), 1, fp);
   fwrite(&tablength, sizeof(int), 1, fp);
@@ -609,8 +554,6 @@ void BondBPMProny::read_restart(FILE *fp)
     utils::sfread(FLERR, &k0[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &ecrit[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &gamma[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
-    utils::sfread(FLERR, &lamc[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
-    utils::sfread(FLERR, &eplastic[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &aT[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &aT_temp[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
 
@@ -622,8 +565,6 @@ void BondBPMProny::read_restart(FILE *fp)
   MPI_Bcast(&k0[1], atom->nbondtypes, MPI_DOUBLE, 0, world);
   MPI_Bcast(&ecrit[1], atom->nbondtypes, MPI_DOUBLE, 0, world);
   MPI_Bcast(&gamma[1], atom->nbondtypes, MPI_DOUBLE, 0, world);
-  MPI_Bcast(&lamc[1], atom->nbondtypes, MPI_DOUBLE, 0, world);
-  MPI_Bcast(&eplastic[1], atom->nbondtypes, MPI_DOUBLE, 0, world);
   MPI_Bcast(&aT[1], atom->nbondtypes, MPI_DOUBLE, 0, world);
   MPI_Bcast(&aT_temp[1], atom->nbondtypes, MPI_DOUBLE, 0, world);
 
@@ -641,8 +582,6 @@ void BondBPMProny::write_restart_settings(FILE *fp)
 {
   fwrite(&smooth_flag, sizeof(int), 1, fp);
   fwrite(&normalize_flag, sizeof(int), 1, fp);
-  fwrite(&nonlinear_flag, sizeof(int), 1, fp);
-  fwrite(&plastic_flag,sizeof(int), 1, fp);
   fwrite(&temperature_flag,sizeof(int), 1, fp);
 }
 
@@ -655,14 +594,10 @@ void BondBPMProny::read_restart_settings(FILE *fp)
   if (comm->me == 0) {
     utils::sfread(FLERR, &smooth_flag, sizeof(int), 1, fp, nullptr, error);
     utils::sfread(FLERR, &normalize_flag, sizeof(int), 1, fp, nullptr, error);
-    utils::sfread(FLERR, &nonlinear_flag, sizeof(int), 1, fp, nullptr, error);
-    utils::sfread(FLERR, &plastic_flag, sizeof(int), 1, fp, nullptr, error);
     utils::sfread(FLERR, &temperature_flag, sizeof(int), 1, fp, nullptr, error);
   }
   MPI_Bcast(&smooth_flag, 1, MPI_INT, 0, world);
   MPI_Bcast(&normalize_flag, 1, MPI_INT, 0, world);
-  MPI_Bcast(&nonlinear_flag, 1, MPI_INT, 0, world);
-  MPI_Bcast(&plastic_flag, 1, MPI_INT, 0, world);
   MPI_Bcast(&temperature_flag, 1, MPI_INT, 0, world);
 }
 
@@ -682,12 +617,12 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   double r = sqrt(rsq);
   double rinv = 1.0 / r;
 
-  double r0, rn, r0p, rc, ep;
+  double r0, rn;
   double k_temp, eta_temp, exp_j, Hn, term1, term2;
   double fel, fint;
   double Nb,numer,denom,lam;
 
-  // rn, ep, hn can be updated, so search bondlist vs. fix_bond_history->get_atom_value()
+  // rn, hn can be updated, so search bondlist vs. fix_bond_history->get_atom_value()
   tagint tagi = tag[i];
   tagint tagj = tag[j];
   tagint tag1, tag2;
@@ -702,7 +637,6 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
    
   r0 = bondstore[n][0];
   rn = bondstore[n][1];
-  ep = bondstore[n][2];
    
   fforce = 0;
   // Loop through Maxwell elements (rate-dependent)
@@ -728,27 +662,12 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   
   double e = (r0 !=0.0) ? (r - r0) / r0 : 0.0;
 
-  //plastic calculations
-  if (plastic_flag) {
-    r0p = (1.0 + ep) * r0;
-  } else
-    r0p = r0;
-
   //rate-independent
   if (normalize_flag) {
-    fel = -k0[type] * (e - ep);
-    fforce += fel;
-  } else if (nonlinear_flag) {
-    if (r > r0p) {
-      rc = r0p * lamc[type]; // if bond is in tension
-    } else {
-      rc = 0; // if bond is in compression
-    }
-    double lam = (r - r0p) / (rc - r0p);
-    fel = -k0[type] * (r - r0p) / ( 2 * (1 - (lam * lam)));
+    fel = -k0[type] * e;
     fforce += fel;
   } else {
-    fel = k0[type] * (r0p - r);
+    fel = k0[type] * (r0 - r);
     fforce += fel;
   }
 
@@ -778,7 +697,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   // set single_extra quantities
 
   svector[0] = r0;
-  svector[1] = (1.0 + ep) * r0;
+  svector[1] = (1.0 + e) * r0;
   svector[2] = fel;
   svector[3] = fint;
 
@@ -841,7 +760,7 @@ void BondBPMProny::read_table(Table *tb, char *file, char *keyword)
   for (int i = 0; i < tb->ninput; i++) {
     line = reader.next_line();
     if (!line)
-      error->one(FLERR, "Data missing when parsing bond table '{}' line {} of {}.", keyword, i + 1,
+      error->one(FLERR, "Data missing when parsing table '{}' line {} of {}.", keyword, i + 1,
                  tb->ninput);
     try {
       ValueTokenizer values(line);
@@ -853,20 +772,19 @@ void BondBPMProny::read_table(Table *tb, char *file, char *keyword)
       if (tb->kfile[i] <= 0) error->one(FLERR, "Bond parameter must positive non-zero");
 
     } catch (TokenizerException &e) {
-      error->one(FLERR, "Error parsing bond table '{}' line {} of {}. {}\nLine was: {}", keyword,
+      error->one(FLERR, "Error parsing table '{}' line {} of {}. {}\nLine was: {}", keyword,
                  i + 1, tb->ninput, e.what(), line);
     }
 
   }
 
-  printf("Read %i parameters from bond table\n",tb->ninput);
+  printf("Read bond coefficients for %i Maxwell elements\n",tb->ninput);
 
 }
 
 /* ----------------------------------------------------------------------
    extract attributes from parameter line in table section
-   format of line: N value FP fplo fphi EQ r0
-   N is required, other params are optional
+   format of line: N value
 ------------------------------------------------------------------------- */
 
 void BondBPMProny::param_extract(Table *tb, char *line)
@@ -892,7 +810,6 @@ void BondBPMProny::param_extract(Table *tb, char *line)
 
   if (tb->ninput == 0) error->one(FLERR, "Bond table parameters did not set N");
 
-  //if (!(tb->ninput == nhistory - 3)) error->one(FLERR, "Mismatched args for bond table parameter N");
   if (tb->ninput > nhistory - 3) error->one(FLERR, "New element exceeded elements per bond in table file");
   
 }
@@ -919,7 +836,7 @@ void BondBPMProny::param_extract(Table *tb, char *line)
 /* ----------------------------------------------------------------------
    broadcast read-in table info from proc 0 to other procs
    this function communicates these values in Table:
-     ninput,rfile,efile,ffile,fpflag,fplo,fphi,r0
+     ninput,r0,kfile,etafile,expfile
 ------------------------------------------------------------------------- */
 
 void BondBPMProny::bcast_table(Table *tb) // *UPDATED

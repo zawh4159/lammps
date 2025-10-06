@@ -38,25 +38,18 @@ class BondBPMProny : public BondBPM {
   void read_restart_settings(FILE *) override;
   double single(int, double, int, int, double &) override;
   void *extract(const char *, int &) override;
-  //int pack_forward_comm(int, int *, double *, int, int *) override;
-  //void unpack_forward_comm(int, int, double *) override;
-  //int pack_reverse_comm(int, int, double *) override;
-  //void unpack_reverse_comm(int, int *, double *) override;
 
  protected:
-  double *k0, *ecrit, *gamma, *lamc, *eplastic, *aT;
-  int smooth_flag, normalize_flag, nonlinear_flag, plastic_flag, temperature_flag;
+  double *k0, *ecrit, *gamma, *aT;
+  int smooth_flag, normalize_flag, temperature_flag;
 
-  int index_vol, index_vol0, nmax;
   char *id_fix_property_bond;
-  double *len_current, **H;
   double *aT_temp;
   double dt_temp;
 
   struct Table {
-   int ninput, fpflag;
-   double fplo, fphi, r0;
-   double lo, hi;
+   int ninput;
+   double r0;
    double *kfile, *etafile, *expfile;
    double *k, *eta, *expj;
   };
