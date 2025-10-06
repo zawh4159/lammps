@@ -11,7 +11,7 @@ Syntax
    bond_style bpm/prony N keyword value attribute1 attribute2 ...
 
 * N = allocate history variables for N Mawell elements
-* optional keyword =  *store/local* or *overlay/pair* or *smooth* or *normalize* or *break* or *plastic* or *nonlinear* or *temp/shift*
+* optional keyword =  *store/local* or *overlay/pair* or *smooth* or *normalize* or *break* or *temp/shift*
 
   .. parsed-literal::
 
@@ -37,12 +37,6 @@ Syntax
        *break* value = *yes* or *no*
           indicates whether bonds break during a run
 
-       *plastic* value = *yes* or *no*
-          indicates whether bonds plastically deform
-
-       *nonlinear* value = *yes* or *no*
-          indicates whether nonlinear option is used
-
        *temp/shift* value = *yes* or *no*
           indicates whether the viscous elements are multiplicatively shifted
 
@@ -53,11 +47,11 @@ Examples
 .. code-block:: LAMMPS
 
    bond_style bpm/prony 1
-   bond_coeff 1 1.0 0.4 0.1 file.table keyword 1.0 1.0 0.0
+   bond_coeff 1 1.0 0.4 0.1 file.table keyword
 
-   bond_style bpm/prony 1 plastic yes nonlinear yes
-   bond_coeff 1 1.0 0.4 0.1 file1.table keyword 1.0 1.0 0.0
-   bond_coeff 2 5.0 0.6 0.1 file2.table keyword 0.2 2.0 0.0
+   bond_style bpm/prony 1 temp/shift yes
+   bond_coeff 1 1.0 0.4 0.1 file1.table keyword 1.0
+   bond_coeff 2 5.0 0.6 0.1 file2.table keyword 10.0
 
    bond_style bpm/prony 1 myfix 1000 time id1 id2
    dump 1 all local 1000 dump.broken f_myfix[1] f_myfix[2] f_myfix[3]
@@ -160,35 +154,6 @@ heuristic maximum strain used by typical non-bpm bond styles. Similar behavior
 to *break no* can also be attained by setting an arbitrarily high value of
 :math:`\epsilon_c`. One cannot use *break no* with *smooth yes*.
 
-The *plastic* keyword toggles whether the elastic element is allowed to plastically
-deform as done by :doc:`bpm/spring/plastic <bond_bpm_spring_plastic>`. If set to *yes* the elastic
-force has a magnitude of
-
-.. math::
-   F_{el} = k_0 (r - r_{eq})
-
-where :math:`r_{eq}` is the equlibrium bond length.
-If the bond stretches beyond a strain of :math:`\epsilon_p` in compression or extension, 
-it will plastically activate and :math:`r_{eq}` will evolve to ensure :math:`|(r-r_{eq})/r_{eq}|`
-never exceeds :math:`r_{eq}`. Therefore, if a bond is continually loaded in either tension or compression, 
-the force in the elastic element will initially grow elastically before plateauing. Similar behaviour to 
-*plastic no* can be achieved by setting an arbitrarily high value of :math:`\epsilon_p`, or a higher value
-than :math:`\epsilon_c` if the *break yes* option is enabled.
-
-The *nonlinear* keyword toggles whether the force in the elastic element is nonlinear. The form
-of this is chosen such that the stiffness is :math:`k_{0}` for small applied strains, and diverges as
-bonds approach a critcal stretch :math:`\lambda_{c}`.
-If set to *yes* the elastic force has a magnitude of
-
-.. math::
-   F_{el} = k_0 (r - r_0)\left[ \frac{1}{1-\lambda^{2}} \right]
-
-where :math:`\lambda = (r - r_{0})/(r_{c}-r_{0})` is the stretch ratio with
-:math:`r_{0}` the reference bond length. The critical length :math:`r_{c}` in tension 
-is simply :math:`\lambda_c r_{0}`, meanwhile in compression :math:`r_{c}` = :math:`0`.
-If additionally, *plastic* = *yes* the reference state :math:`r_0`
-is replaced by the equlibrium state :math:`r_{eq}` as outlined above.
-
 The *temp/shift* keyword toggles whether the shift factor is used. This multiplicatively 
 adjusts the viscoelastic timescale as
 
@@ -212,12 +177,13 @@ the data file or restart files read by the :doc:`read_data
 * :math:`\gamma`         (force/velocity units)
 * filename
 * keyword
-* :math:`\epsilon_p`      (unitless)
-* :math:`\lambda_c`       (unitless)
-* :math:`a_T`             (unitless)
 
 The filename specifies a file containing the tablulated coefficients for the Maxwell 
 elements. The keyword specifies a section of the file. The format of this file is described below.
+Additionally, if *temp/shift* is set to yes, a sixth coefficient 
+must be provided:
+
+* :math:`a_T`             (unitless)
 
 If the *store/local* keyword is used, an internal fix will track bonds that
 break during the simulation. Whenever a bond breaks, data is processed
@@ -302,9 +268,7 @@ file and must be redefined.
 The single() function of this bond style returns 0.0 for the energy of a 
 bonded interaction, since energy is not conserved in these dissipative potentials. 
 However, the single() function also calculates 4 additional quantities. The first 2 pertain 
-to bond lengths, including the reference state :math:`r_0` and equlibrium state :math:`r_{eq}`
-if the *plastic* option is utilized. If *plastic* = *no* then the equlibrium state 
-:math:`r_{eq}` will equal the reference state :math:`r_0`.
+to bond lengths, including the reference state :math:`r_0` and equlibrium state :math:`r_{eq}`.
 The next 2 quantites (3-4) are the split elastic :math:`F_{el}`
 and viscoelastic :math:`H_d` forces respectively.
 
@@ -340,7 +304,7 @@ Related commands
 Default
 """""""
 
-The option defaults are *overlay/pair* = *no*, *smooth* = *yes*, *normalize* = *no*, *break* = *yes*, *plastic* = *no*, *nonlinear* = *no*, and *temp/shift* = *no*
+The option defaults are *overlay/pair* = *no*, *smooth* = *yes*, *normalize* = *no*, *break* = *yes*, and *temp/shift* = *no*
 
 ----------
 
