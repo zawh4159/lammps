@@ -285,10 +285,6 @@ void BondBPMProny::compute(int eflag, int vflag)
     r0 = bondstore[n][0]; 
 
     const Table *tb = &tables[tabindex[type]];
-
-    for (int t = 0; t < tb->ninput; t++) {
-      //printf("Table info: ninput %i | k %f | eta %f | exp %f |\n",tb->ninput,tb->kfile[t],tb->etafile[t],tb->expfile[i]);
-    }
     
     // Update table (exponential constants)
     if (!(dt == dt_temp)) {
@@ -352,7 +348,7 @@ void BondBPMProny::compute(int eflag, int vflag)
 
       // Get bond history variable
       Hn = bondstore[n][m+3];
-      printf("r0 %f | rn %f | bond history %f\n",r0,rn,Hn);
+
       if (normalize_flag) {
         term1 = exp_j * Hn;
         term2 =  k_temp * ((rn - r) / r0) * (1 - exp_j) / (dt * k_temp / eta_temp);
@@ -484,7 +480,6 @@ void BondBPMProny::coeff(int narg, char **arg)
 void BondBPMProny::init_style()
 {
   
-  printf("nhistory %i\n",nhistory);
   BondBPM::init_style();
 
   if (comm->ghost_velocity == 0)
@@ -561,12 +556,6 @@ void BondBPMProny::write_restart(FILE *fp)
     fwrite(tb.kfile,sizeof(double),tb.ninput,fp);
     fwrite(tb.etafile,sizeof(double),tb.ninput,fp);
   }
-  
-  //fwrite(&tables[1],sizeof(struct Table), atom->nbondtypes,fp);
-  //printf("size of table %i\n",tb.ninput);
-  //printf("size of table %n\n",&tablength);
-
-
 }
 
 /* ----------------------------------------------------------------------
@@ -883,9 +872,8 @@ void BondBPMProny::param_extract(Table *tb, char *line)
 {   
   double dt = update->dt;
   double k_temp, eta_temp, exp_j;
-  printf("hey\n");
   const Table *tb = &tables[tabindex[type]];
-  printf("hey %i\n",tb->ninput);
+
     for (int m = 0; m < tb->ninput; m++ ) {
 
       k_temp = tb->kfile[m];
