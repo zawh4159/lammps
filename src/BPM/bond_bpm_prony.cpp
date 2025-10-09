@@ -48,7 +48,7 @@ BondBPMProny::BondBPMProny(LAMMPS *_lmp) :
   ntables = 0;
   tables = nullptr;
 
-  nhistory = 3;
+  nhistory = 3; // this gets updated post settings()
   update_flag = 1;
   id_fix_bond_history = utils::strdup("HISTORY_BPM_PRONY");
 
@@ -246,12 +246,8 @@ void BondBPMProny::store_data()
 
 void BondBPMProny::compute(int eflag, int vflag)
 {
-  int i, bond_change_flag;
-
-  if (!fix_bond_history->stored_flag) {
-    fix_bond_history->stored_flag = true;
-    store_data();
-  }
+  
+  pre_compute();
 
   if (hybrid_flag) fix_bond_history->compress_history();
 
@@ -290,6 +286,10 @@ void BondBPMProny::compute(int eflag, int vflag)
 
     const Table *tb = &tables[tabindex[type]];
 
+    for (int t = 0; t < tb->ninput; t++) {
+      //printf("Table info: ninput %i | k %f | eta %f | exp %f |\n",tb->ninput,tb->kfile[t],tb->etafile[t],tb->expfile[i]);
+    }
+    
     // Update table (exponential constants)
     if (!(dt == dt_temp)) {
       update_table(type); // if the timestep has changed
@@ -352,7 +352,7 @@ void BondBPMProny::compute(int eflag, int vflag)
 
       // Get bond history variable
       Hn = bondstore[n][m+3];
-
+      printf("r0 %f | rn %f | bond history %f\n",r0,rn,Hn);
       if (normalize_flag) {
         term1 = exp_j * Hn;
         term2 =  k_temp * ((rn - r) / r0) * (1 - exp_j) / (dt * k_temp / eta_temp);
@@ -399,6 +399,8 @@ void BondBPMProny::compute(int eflag, int vflag)
   }
 
   if (hybrid_flag) fix_bond_history->uncompress_history();
+
+  post_compute();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -413,6 +415,7 @@ void BondBPMProny::allocate()
   memory->create(gamma, np1, "bond:gamma");
   memory->create(aT,np1,"bond:aT"); 
   memory->create(aT_temp,np1,"bond:aT_temp");
+
   memory->create(tabindex, np1, "bond:tabindex");
   memory->create(setflag, np1, "bond:setflag");
 
@@ -480,6 +483,8 @@ void BondBPMProny::coeff(int narg, char **arg)
 
 void BondBPMProny::init_style()
 {
+  
+  printf("nhistory %i\n",nhistory);
   BondBPM::init_style();
 
   if (comm->ghost_velocity == 0)
@@ -492,7 +497,10 @@ void BondBPMProny::init_style()
 void BondBPMProny::settings(int narg, char **arg)
 {
   nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 3;
-  
+
+  //fix_bond_history->ndata = nhistory;
+
+  //BondBPM::init_style();
   BondBPM::settings(narg, arg);
 
   int iarg; 
@@ -535,9 +543,30 @@ void BondBPMProny::write_restart(FILE *fp)
   fwrite(&k0[1], sizeof(double), atom->nbondtypes, fp);
   fwrite(&ecrit[1], sizeof(double), atom->nbondtypes, fp);
   fwrite(&gamma[1], sizeof(double), atom->nbondtypes, fp);
+  fwrite(&aT[1], sizeof(double), atom->nbondtypes,fp);
+  fwrite(&aT_temp[1],sizeof(double), atom->nbondtypes,fp);
 
   fwrite(&tabstyle, sizeof(int), 1, fp);
   fwrite(&tablength, sizeof(int), 1, fp);
+  fwrite(&ntables,sizeof(int),1,fp);
+  fwrite(&nhistory,sizeof(int), 1, fp);
+
+  // write table data (only need to write k and eta)
+  for (int t = 0; t < ntables; t++) {
+    Table &tb = tables[t];
+
+    fwrite(&tb.ninput,sizeof(int),1,fp);
+    fwrite(&tb.r0,sizeof(double),1,fp);
+
+    fwrite(tb.kfile,sizeof(double),tb.ninput,fp);
+    fwrite(tb.etafile,sizeof(double),tb.ninput,fp);
+  }
+  
+  //fwrite(&tables[1],sizeof(struct Table), atom->nbondtypes,fp);
+  //printf("size of table %i\n",tb.ninput);
+  //printf("size of table %n\n",&tablength);
+
+
 }
 
 /* ----------------------------------------------------------------------
@@ -549,17 +578,19 @@ void BondBPMProny::read_restart(FILE *fp)
   BondBPM::read_restart(fp);
   read_restart_settings(fp);
   allocate();
-
+  
   if (comm->me == 0) {
     utils::sfread(FLERR, &k0[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &ecrit[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &gamma[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &aT[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &aT_temp[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);
-
+    
+    //utils::sfread(FLERR, &tables[1], sizeof(struct Table), atom->nbondtypes, fp, nullptr, error);
     utils::sfread(FLERR, &tabstyle, sizeof(int), 1, fp, nullptr, error);
     utils::sfread(FLERR, &tablength, sizeof(int), 1, fp, nullptr, error);
-    
+    utils::sfread(FLERR, &ntables, sizeof(int), 1 , fp, nullptr, error);
+    utils::sfread(FLERR, &nhistory, sizeof(int), 1, fp, nullptr, error);
   }
 
   MPI_Bcast(&k0[1], atom->nbondtypes, MPI_DOUBLE, 0, world);
@@ -570,6 +601,38 @@ void BondBPMProny::read_restart(FILE *fp)
 
   MPI_Bcast(&tabstyle, 1, MPI_INT, 0, world);
   MPI_Bcast(&tablength, 1, MPI_INT, 0, world);
+  MPI_Bcast(&ntables, 1, MPI_INT, 0 ,world);
+  MPI_Bcast(&nhistory, 1, MPI_INT, 0, world);
+
+  //allocate tables array on all proc
+  tables = (Table *) memory->srealloc(tables, ntables * sizeof(Table),"bond:tables");
+
+  for (int t = 0; t < ntables; t++) {
+    Table *tb = &tables[t];
+    null_table(tb);
+
+    int ninput_local = 0;
+    double r0_local = 0.0;
+
+    if (comm->me == 0) {
+      utils::sfread(FLERR, &ninput_local, sizeof(int), 1, fp, nullptr, error);
+      utils::sfread(FLERR, &r0_local, sizeof(double), 1, fp, nullptr, error);
+
+      tb->ninput = ninput_local;
+      tb->r0 = r0_local;
+
+      tb->kfile = nullptr; tb->etafile = nullptr; tb->expfile = nullptr;
+      memory->create(tb->kfile, tb->ninput, "bond:kfile");
+      memory->create(tb->etafile, tb->ninput, "bond:etafile");
+      memory->create(tb->expfile, tb->ninput, "bond:expfile");
+      utils::sfread(FLERR, tb->kfile, sizeof(double), tb->ninput, fp, nullptr, error);
+      utils::sfread(FLERR, tb->etafile, sizeof(double), tb->ninput, fp, nullptr, error);
+
+      for (int i = 0; i< tb->ninput; i++) tb->expfile[i] = 0.0; // this will be recomputed
+    }
+
+    bcast_table(tb); // broadcast table to all processors
+  }
 
   for (int i = 1; i <= atom->nbondtypes; i++) setflag[i] = 1;
 }
@@ -820,7 +883,9 @@ void BondBPMProny::param_extract(Table *tb, char *line)
 {   
   double dt = update->dt;
   double k_temp, eta_temp, exp_j;
+  printf("hey\n");
   const Table *tb = &tables[tabindex[type]];
+  printf("hey %i\n",tb->ninput);
     for (int m = 0; m < tb->ninput; m++ ) {
 
       k_temp = tb->kfile[m];
