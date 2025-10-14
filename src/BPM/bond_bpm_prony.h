@@ -58,7 +58,8 @@ class BondBPMProny : public BondBPM {
   Table *tables;
 
   void allocate();
-  void store_data();
+  void store_data() override;
+  void restore_data() override;
   double store_bond(int, int, int);
 
   void null_table(Table *);

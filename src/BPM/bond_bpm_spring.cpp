@@ -85,6 +85,23 @@ BondBPMSpring::~BondBPMSpring()
 }
 
 /* ----------------------------------------------------------------------
+  Restore data for all bonds called once from reference file
+------------------------------------------------------------------------- */
+void BondBPMSpring::restore_data()
+{
+
+  int i, j, n, m, type;
+  double delx, dely, delz, r;
+  double k_temp, eta_temp, exp_j;
+  double **x = atom->x;
+  double dt = update->dt;
+  int **bond_type = atom->bond_type;
+
+  double **bondstore = fix_bond_history->bondstore;
+
+}
+
+/* ----------------------------------------------------------------------
   Store data for all bonds, called once
 ------------------------------------------------------------------------- */
 

@@ -43,6 +43,7 @@ class BondBPMSpringPlastic : public BondBPM {
   int smooth_flag, normalize_flag;
 
   void allocate();
+  void restore_data() override;
   void store_data() override;
 };
 

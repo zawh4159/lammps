@@ -30,6 +30,7 @@
 #include "memory.h"
 #include "modify.h"
 #include "update.h"
+#include "table_file_reader.h"
 
 #include <cmath>
 #include <cstring>
@@ -55,7 +56,7 @@ BondBPM::BondBPM(LAMMPS *_lmp) :
     Bond(_lmp), id_fix_dummy_special(nullptr), id_fix_dummy_history(nullptr),
     id_fix_update_special_bonds(nullptr), id_fix_bond_history(nullptr), id_fix_store_local(nullptr),
     id_fix_property_atom(nullptr), fix_store_local(nullptr), fix_bond_history(nullptr),
-    fix_update_special_bonds(nullptr), pack_choice(nullptr), output_data(nullptr)
+    fix_update_special_bonds(nullptr), pack_choice(nullptr), output_data(nullptr), bListdata(nullptr), bHistdata(nullptr)
 {
   overlay_flag = 0;
   property_atom_flag = 0;
@@ -68,6 +69,7 @@ BondBPM::BondBPM(LAMMPS *_lmp) :
   n_histories = 0;
   update_flag = 0;
   hybrid_flag = 0;
+  reference_flag = 0;
   store_local_freq = 0;
 
   r0_max_estimate = 0.0;
@@ -105,6 +107,8 @@ BondBPM::~BondBPM()
   delete[] id_fix_property_atom;
 
   memory->destroy(output_data);
+  memory->destroy(bListdata);
+  memory->destroy(bHistdata);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -269,6 +273,11 @@ void BondBPM::settings(int narg, char **arg)
       if (iarg + 1 > narg) error->all(FLERR, "Illegal bond bpm command, missing option for break");
       break_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
       iarg += 2;
+    } else if (strcmp(arg[iarg], "read/reference") == 0) {
+      if (iarg + 2 > narg) error->all(FLERR, "Illegal bond bpm command, missing option for read/reference");
+      reference_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
+      ref_filename = arg[iarg + 2];
+      iarg += 3;
     } else {
       leftover_iarg.push_back(iarg);
       iarg++;
@@ -338,6 +347,9 @@ void BondBPM::settings(int narg, char **arg)
     delete[] id_fix_dummy_history;
     id_fix_dummy_history = nullptr;
   }
+
+  // read ref file (if enabled)
+  read_reference(ref_filename);
 
   // If bonds don't break and there's no overlay, can ignore special requirements
   if (break_flag == 0 && overlay_flag == 0)
@@ -427,6 +439,87 @@ void BondBPM::read_restart(FILE *fp)
   }
   MPI_Bcast(&overlay_flag, 1, MPI_INT, 0, world);
   MPI_Bcast(&break_flag, 1, MPI_INT, 0, world);
+}
+
+void BondBPM::read_reference(char *file)
+{
+  if (!reference_flag) return;
+
+  printf("\nReading reference file ...\n");
+
+  TableFileReader reader(lmp, file, "bond/bpm");
+  std::string keyword = "ENTRIES";
+  
+  // find first keyword
+  char *line = nullptr; int got_line = 0;
+  while ((line = reader.next_line())) {
+    ValueTokenizer values(line);
+
+    int nwords = utils::count_words(line);
+    for (int t = 0; t < nwords; t++) {
+      std::string word = values.next_string();
+      if (word == keyword) {
+        // matching keyword
+        got_line = 1;  
+        break;
+      }
+    }
+    if (got_line) break;
+  }
+
+  if (!line) error->one(FLERR, "Did not find keyword {} in reference file", keyword);
+
+  line = reader.next_line();
+  ValueTokenizer values(line);
+  nentries = values.next_int();
+
+  // Find the next line with keyword
+  got_line = 0;
+  while ((line = reader.next_line())) {
+    ValueTokenizer values(line);
+
+    int nwords = utils::count_words(line);
+    for (int t = 0; t < nwords; t++) {
+      std::string word = values.next_string();
+      if (word == keyword) {
+        // matching keyword
+        got_line = 1;
+        break;
+      }
+    }
+    if (got_line) break;
+  }
+
+  int nwords = utils::count_words(line);
+  nbonddata = nwords - 2; // number of history variables found in ref file
+
+  // allocate memory
+  memory->create(bListdata, 2*nentries, "bond/bpm:bListdata");
+  memory->create(bHistdata, nentries*(nbonddata-2), "bond/bpm:bHistdata");
+  
+  // Parse bond data
+  for (int t = 0; t < nentries; t++) {
+    line = reader.next_line();
+
+    if (!line)
+      error->one(FLERR, "Data missing when parsing file '{}' line {} of {}.", file, t + 1, nentries);
+    try {
+      ValueTokenizer values(line);
+
+      bListdata[t*nentries] = values.next_int();
+      bListdata[t*nentries + 1] = values.next_int();
+      for (int d = 0; d < nbonddata - 2; d++) {
+        double hvar = values.next_double(); 
+        bHistdata[t*(nbonddata-2) + d] = hvar;
+      }
+
+    } catch (TokenizerException &e) {
+      error->one(FLERR, "Error parsing reference file '{}' line {} of {}. {}\nLine was: {}", file,
+                 t + 1, nentries, e.what(), line);
+    }
+  } 
+
+  printf("  read %i history variables for %i bonds\n",nbonddata-2,nentries);
 }
 
 /* ----------------------------------------------------------------------
@@ -538,8 +631,14 @@ void BondBPM::pre_compute()
   if (!fix_bond_history->stored_flag) {
     fix_bond_history->stored_flag = true;
 
-    // Calculate substyle-specific bond history data  and save to atom arrays
-    store_data();
+    // if starting from reference point
+    if (reference_flag) {
+      // Restore substyle-specific bond history data and save to atom arrays
+      restore_data();
+    } else {
+      // Calculate substyle-specific bond history data and save to atom arrays
+      store_data();
+    }
 
     // Rebuild bondstore array
     fix_bond_history->post_neighbor();

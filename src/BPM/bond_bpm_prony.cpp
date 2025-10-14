@@ -174,6 +174,71 @@ double BondBPMProny::store_bond(int n, int i, int j)
 }
 
 /* ----------------------------------------------------------------------
+  Restore data for all bonds called once from reference file
+------------------------------------------------------------------------- */
+void BondBPMProny::restore_data()
+{
+
+  int i, j, n, m, type;
+  int iatom, jatom;
+  double delx, dely, delz, hvar;
+  double **x = atom->x;
+  double dt = update->dt;
+  int **bond_type = atom->bond_type;
+
+  double **bondstore = fix_bond_history->bondstore;
+  
+  if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for bpm/prony expected {}",nhistory);
+
+  int atomfile[nentries][2];
+  double histfile[nentries][nbonddata-2];
+
+  //reshape history vectors to array
+  for (int t = 0; t < nentries; t++) {
+    atomfile[t][0] = bListdata[t*nentries];
+    atomfile[t][1] = bListdata[t*nentries + 1];
+    for (int d = 0; d < nbonddata - 2; d++) {
+      histfile[t][d] = bHistdata[t*(nbonddata-2) + d];
+    }
+  }
+
+  // restore data to bondstore and atom arrays
+  for (i = 0; i < atom->nlocal; i++) {
+    for (m = 0; m < atom->num_bond[i]; m++) {
+      type = bond_type[i][m];
+
+      //Skip if bond was turned off
+      if (type < 0) continue;
+
+      // map to find index n
+      j = atom->map(atom->bond_atom[i][m]);
+      if (j == -1) error->one(FLERR, "Atom missing in BPM bond");
+
+      // find the correct entry in the history files
+      for (int n = 0; n < nentries; n++) {
+        iatom = atomfile[n][0];
+        jatom = atomfile[n][1];
+
+        if ((iatom == atom->tag[i] && jatom == atom->tag[j]) || (iatom == atom->tag[j] && jatom == atom->tag[i])) {
+          break;
+        } else {
+          error->one(FLERR,"Atom missing in reference file");
+        }
+      }
+
+      // restore history
+      for (int h = 0; h < (nbonddata - 2); h++) {
+        hvar = histfile[n][h];
+        fix_bond_history->update_atom_value(i, m, h, hvar);
+        bondstore[m][h] = hvar;
+      }
+
+    }
+  }
+
+}
+
+/* ----------------------------------------------------------------------
   Store data for all bonds called once
 ------------------------------------------------------------------------- */
 
@@ -185,7 +250,6 @@ void BondBPMProny::store_data()
   double **x = atom->x;
   double dt = update->dt;
   int **bond_type = atom->bond_type;
-
   double **bondstore = fix_bond_history->bondstore;
 
   for (i = 0; i < atom->nlocal; i++) {
@@ -493,10 +557,8 @@ void BondBPMProny::settings(int narg, char **arg)
 {
   nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 3;
 
-  //fix_bond_history->ndata = nhistory;
-
   //BondBPM::init_style();
-  BondBPM::settings(narg, arg);
+  BondBPM::settings(narg, arg); //after this point ref flag is set number of history variable is updated
 
   int iarg; 
   for (std::size_t i = 1; i < leftover_iarg.size(); i++) {
@@ -787,6 +849,8 @@ void BondBPMProny::free_table(Table *tb)
 
 void BondBPMProny::read_table(Table *tb, char *file, char *keyword)
 {
+  
+  printf("Reading table file ...\n");
   double dt = update->dt;
   
   TableFileReader reader(lmp, file, "bond");
@@ -830,7 +894,7 @@ void BondBPMProny::read_table(Table *tb, char *file, char *keyword)
 
   }
 
-  printf("Read bond coefficients for %i Maxwell elements\n",tb->ninput);
+  printf("  read bond coefficients for %i Maxwell elements\n\n",tb->ninput);
 
 }
 
