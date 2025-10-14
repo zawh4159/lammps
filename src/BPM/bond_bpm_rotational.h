@@ -48,7 +48,6 @@ class BondBPMRotational : public BondBPM {
   void damping_forces(int, int, int, double *, double *, double *, double *, double *);
 
   void allocate();
-  void restore_data() override;
   void store_data() override;
 };
 

@@ -274,10 +274,11 @@ void BondBPM::settings(int narg, char **arg)
       break_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
       iarg += 2;
     } else if (strcmp(arg[iarg], "read/reference") == 0) {
-      if (iarg + 2 > narg) error->all(FLERR, "Illegal bond bpm command, missing option for read/reference");
-      reference_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
-      ref_filename = arg[iarg + 2];
-      iarg += 3;
+      if (iarg + 1 > narg) error->all(FLERR, "Illegal bond bpm command, missing option for read/reference");
+      reference_flag = 1;
+      //reference_flag = utils::logical(FLERR, arg[iarg + 1], false, lmp);
+      ref_filename = arg[iarg + 1];
+      iarg += 2;
     } else {
       leftover_iarg.push_back(iarg);
       iarg++;
@@ -441,6 +442,10 @@ void BondBPM::read_restart(FILE *fp)
   MPI_Bcast(&break_flag, 1, MPI_INT, 0, world);
 }
 
+/* ----------------------------------------------------------------------
+    read bond data from reference file
+ ------------------------------------------------------------------------- */
+
 void BondBPM::read_reference(char *file)
 {
   if (!reference_flag) return;
@@ -506,8 +511,11 @@ void BondBPM::read_reference(char *file)
     try {
       ValueTokenizer values(line);
 
-      bListdata[t*nentries] = values.next_int();
-      bListdata[t*nentries + 1] = values.next_int();
+      int ncol = utils::count_words(line);
+      if (ncol != nbonddata) error->one(FLERR, "Data missing when parsing file '{}' line {} of {}.", file, t + 1, nentries);
+
+      bListdata[2*t] = values.next_int();
+      bListdata[2*t + 1] = values.next_int();
       for (int d = 0; d < nbonddata - 2; d++) {
         double hvar = values.next_double(); 
         bHistdata[t*(nbonddata-2) + d] = hvar;
@@ -661,6 +669,74 @@ void BondBPM::post_compute()
   MPI_Allreduce(&nbroken, &nbroken_total, 1, MPI_INT,MPI_SUM, world);
   atom->nbonds -= nbroken_total;
 }
+
+/* ----------------------------------------------------------------------
+  Restores bond data from a reference file
+------------------------------------------------------------------------- */
+void BondBPM::restore_data()
+{ 
+  int i, j, n, m, type;
+  int iatom, jatom;
+  double delx, dely, delz, hvar;
+  double **x = atom->x;
+  double dt = update->dt;
+  int **bond_type = atom->bond_type;
+
+  double **bondstore = fix_bond_history->bondstore;
+  
+  // error checks
+  if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for {} expected {}",force->bond_style,nhistory);
+
+  if ((nentries != atom->nbonds)) error->one(FLERR,"Incorrect number of bond entries in reference file {} expected {}",ref_filename,atom->nbonds);
+
+  int atomfile[nentries][2];
+  double histfile[nentries][nbonddata-2];
+
+  //reshape history vectors to array
+  for (int t = 0; t < nentries; t++) {
+    atomfile[t][0] = bListdata[2*t];
+    atomfile[t][1] = bListdata[2*t + 1];
+    for (int d = 0; d < nbonddata - 2; d++) {
+      histfile[t][d] = bHistdata[t*(nbonddata-2) + d];
+    }
+  }
+
+  // restore data to bondstore and atom arrays
+  for (i = 0; i < atom->nlocal; i++) {
+    for (m = 0; m < atom->num_bond[i]; m++) {
+      type = bond_type[i][m];
+
+      //Skip if bond was turned off
+      if (type < 0) continue;
+
+      // map to find index n
+      j = atom->map(atom->bond_atom[i][m]);
+      if (j == -1) error->one(FLERR, "Atom missing in BPM bond");
+
+      // find the correct entry in the history files
+      for (int n = 0; n < nentries; n++) {
+        iatom = atomfile[n][0];
+        jatom = atomfile[n][1];
+        
+        if ((iatom == atom->tag[i] && jatom == atom->tag[j]) || (iatom == atom->tag[j] && jatom == atom->tag[i])) {
+          break;
+        } else {
+          error->one(FLERR,"Atom missing in reference file");
+        }
+      }
+
+      // restore history
+      for (int h = 0; h < (nbonddata - 2); h++) {
+        hvar = histfile[n][h];
+        fix_bond_history->update_atom_value(i, m, h, hvar);
+        bondstore[m][h] = hvar;
+      }
+
+    }
+  }
+
+}
+
 
 /* ----------------------------------------------------------------------
    one method for every keyword bond bpm can output

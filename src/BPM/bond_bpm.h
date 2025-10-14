@@ -56,7 +56,7 @@ class BondBPM : public Bond {
   double *bHistdata;
 
   virtual void store_data() = 0;
-  virtual void restore_data() = 0;
+  void restore_data();
   void pre_compute();
   void post_compute();
   void process_broken(int, int);

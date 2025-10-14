@@ -51,7 +51,6 @@ class BondBPMSpring : public BondBPM {
   double *dvol0;
 
   void allocate();
-  void restore_data() override;
   void store_data() override;
   int calculate_vol();
   void update_vol0();
