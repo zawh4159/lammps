@@ -697,6 +697,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
     exp_j = tb->expfile[m];
 
     Hn = bondstore[n][m+3];
+    svector[3] = Hn;
 
     if (normalize_flag) { 
       term1 = exp_j * Hn;
@@ -746,9 +747,9 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   // set single_extra quantities
 
   svector[0] = r0;
-  svector[1] = (1.0 + e) * r0;
-  svector[2] = fel;
-  svector[3] = fint;
+  svector[1] = rn;
+  svector[2] = 0;  //reserved for future use
+  
 
   return 0.0;
 }
