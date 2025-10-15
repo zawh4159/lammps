@@ -52,12 +52,12 @@ BondBPMProny::BondBPMProny(LAMMPS *_lmp) :
   ntables = 0;
   tables = nullptr;
 
-  nhistory = 3; // this gets updated post settings()
+  nhistory = 2; // this gets updated post settings()
   update_flag = 1;
   id_fix_bond_history = utils::strdup("HISTORY_BPM_PRONY");
 
-  single_extra = 4;
-  svector = new double[4];
+  single_extra = 2;
+  svector = new double[2];
 
   comm_forward = 1;
   comm_reverse = 1;
@@ -114,7 +114,6 @@ double BondBPMProny::store_bond(int n, int i, int j)
 
   bondstore[n][0] = r;
   bondstore[n][1] = r;
-  bondstore[n][2] = 0;
 
   if (i < atom->nlocal) {
     for (int m = 0; m < atom->num_bond[i]; m++) {
@@ -136,7 +135,7 @@ double BondBPMProny::store_bond(int n, int i, int j)
         dt_temp = dt;
 
         // Internal stress variable
-        fix_bond_history->update_atom_value(i, m, l+3, 0);
+        fix_bond_history->update_atom_value(i, m, l+2, 0);
 
         }  
       }
@@ -163,7 +162,7 @@ double BondBPMProny::store_bond(int n, int i, int j)
         dt_temp = dt;
 
         // Internal stress variable
-        fix_bond_history->update_atom_value(j, m, l+3, 0);     
+        fix_bond_history->update_atom_value(j, m, l+2, 0);     
 
         }
       }
@@ -216,7 +215,6 @@ void BondBPMProny::store_data()
 
       bondstore[m][0] = r;
       bondstore[m][1] = r;
-      bondstore[m][2] = 0;
 
       const Table *tb = &tables[tabindex[type]];
       if (r < EPSILON) {
@@ -235,8 +233,8 @@ void BondBPMProny::store_data()
         dt_temp = dt;
 
         // Internal stress variable
-        fix_bond_history->update_atom_value(i, m, n+3, 0);
-        bondstore[m][n+3] = 0;
+        fix_bond_history->update_atom_value(i, m, n+2, 0);
+        bondstore[m][n+2] = 0;
 
       }
 
@@ -350,7 +348,7 @@ void BondBPMProny::compute(int eflag, int vflag)
       exp_j = tb->expfile[m];
 
       // Get bond history variable
-      Hn = bondstore[n][m+3];
+      Hn = bondstore[n][m+2];
 
       if (normalize_flag) {
         term1 = exp_j * Hn;
@@ -363,7 +361,7 @@ void BondBPMProny::compute(int eflag, int vflag)
       
       // Update bond history variable
       Hn = term1 + term2;
-      bondstore[n][m+3] = Hn;
+      bondstore[n][m+2] = Hn;
     }
 
     delvx = v[i1][0] - v[i2][0];
@@ -494,7 +492,10 @@ void BondBPMProny::init_style()
 
 void BondBPMProny::settings(int narg, char **arg)
 {
-  nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 3;
+  nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 2;
+  single_extra = nhistory + 2;
+  svector = new double[nhistory + 2];
+
 
   //BondBPM::init_style();
   BondBPM::settings(narg, arg); //after this point ref flag is set number of history variable is updated
@@ -700,8 +701,8 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
     eta_temp = aT[type] * tb->etafile[m];
     exp_j = tb->expfile[m];
 
-    Hn = bondstore[n][m+3];
-    svector[3] = Hn;
+    Hn = bondstore[n][m+2];
+    svector[m+2] = Hn;
 
     if (normalize_flag) { 
       term1 = exp_j * Hn;
@@ -752,8 +753,9 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
 
   svector[0] = r0;
   svector[1] = rn;
-  svector[2] = 0;  //reserved for future use
-  
+
+  svector[nhistory + 1] = fel;
+  svector[nhistory + 2] = fint;
 
   return 0.0;
 }
@@ -866,7 +868,7 @@ void BondBPMProny::param_extract(Table *tb, char *line)
 
   if (tb->ninput == 0) error->one(FLERR, "Bond table parameters did not set N");
 
-  if (tb->ninput > nhistory - 3) error->one(FLERR, "New element exceeded elements per bond in table file");
+  if (tb->ninput > nhistory - 2) error->one(FLERR, "New element exceeded elements per bond in table file");
   
 }
 
