@@ -85,6 +85,62 @@ files to render bond data.
 
 ----------
 
+**Formatting the reference file**
+
+The keywords ENTRIES must be present and capitalized as shown. The position
+of the keyword within the line does not matter.
+
+The first keyword identifies the start of the file and 
+the number of bonds to read. This must come immediately after the keyword
+with no spaces between lines.
+
+The second instance of the keyword indentifies how many bond data 
+variables to read. While the keyword must be written exactly as shown the other
+words are irrelevant. BPM expects two words in addition to the bond reference words to be present.
+In other words, if 5 bond reference data are to be read then 7 words (including the keyword) must
+be present. The next line must be the start of the bond reference data.
+
+The first two integers must be the bond atom IDs followed by the bond reference data, in order
+as specified in the table below.
+
+A sample file is provided with annotations in parenthesis and lengthy sections replaced by dots (...).
+
+.. code-block:: LAMMPS
+
+   ITEM: NUMBER OF ENTRIES                                         (first keyword identifies start of file)
+   100                                                             (# of bonds to read, must come on next line after keyword)
+   ...
+   ITEM: ENTRIES c_batom[1] c_batom[2] c_ref[1] c_ref[2] c_ref[3]  (expected # of columns to read following the second keyword)
+   batom1 batom2 b1 b2 b3                                            
+   ...
+   batom1 batom2 b1 b2 b3
+
+
+An example of how to write a reference file every ``N`` timesteps is given
+
+   .. code-block:: LAMMPS
+
+      compute batom all property/local batom1 batom2
+      compute ref all bond/local b1 b2 b3
+      dump write_ref all local N bond*.ref c_batom[1] c_batom[2] c_ref[1] c_ref[2] c_ref[3]
+
+The proper number of bond reference data to include in the reference file 
+depends on the specific BPM bond style and can be determined from the table. 
+This includes the expected order and corresponding index as 
+accessed by the :doc:`compute bond/local <compute_bond_local>` command.
+
++-----------------------------------------------------+--------------------------------------------------------------------------------+-------------------+
+| :doc:`bpm/spring <bond_bpm_spring>`                 | :math:`r_0`                                                                    | b1                |
++-----------------------------------------------------+--------------------------------------------------------------------------------+-------------------+
+| :doc:`bpm/spring/plastic <bond_bpm_spring_plastic>` | :math:`r_0` :math:`r_{ep}`                                                     | b1 b2             |
++-----------------------------------------------------+--------------------------------------------------------------------------------+-------------------+
+| :doc:`bpm/rotational <bond_bpm_rotational>`         | :math:`r_0` :math:`\hat{r}_{0,x}` :math:`\hat{r}_{0,y}` :math:`\hat{r}_{0,z}`  | b1 b2 b3 b4       |
++-----------------------------------------------------+--------------------------------------------------------------------------------+-------------------+
+| :doc:`bpm/prony <bond_bpm_prony>`                   |:math:`r_0` :math:`r_n` :math:`h_j` ... :math:`h_N`                             | b1 b2 b3 ... bN+2 |
++-----------------------------------------------------+--------------------------------------------------------------------------------+-------------------+
+
+----------
+
 As bonds can potentially be broken between neighbor list builds, BPM bond
 styles may place restrictions on the :doc:`special_bonds <special_bonds>` command. There are three possible scenarios which determine how pair
 interactions between bonded particles and special bond weights work.
