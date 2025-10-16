@@ -11,7 +11,7 @@ Syntax
    bond_style bpm/prony N keyword value attribute1 attribute2 ...
 
 * N = allocate history variables for N Mawell elements
-* optional keyword =  *store/local* or *overlay/pair* or *smooth* or *normalize* or *break* or *temp/shift*
+* optional keyword =  *store/local* or *read/reference* or *overlay/pair* or *smooth* or *normalize* or *break* or *temp/shift*
 
   .. parsed-literal::
 
@@ -27,6 +27,9 @@ Syntax
 
        *overlay/pair* value = *yes* or *no*
           bonded particles will still interact with pair forces
+
+       *read/reference* value = *filename*
+          reads bond history data from reference file
 
        *smooth* value = *yes* or *no*
           smooths bond forces near the breaking point
@@ -185,6 +188,15 @@ must be provided:
 
 * :math:`a_T`             (unitless)
 
+If the *read/reference* keyword is used, bond data will restored from a
+prevoius reference point specified by a reference file that is read before
+the simulation, instead of initializing based on bonds current state. 
+This allows for the redeclaration of bond coefficients, without redefining bonds 
+reference state. Bond reference data is calculated by the single() function and can
+be accessed by the compute bond/local command. See the :doc:`Howto bpm<Howto_bpm>` for
+rules on formatting the reference file, including how to write reference files during a 
+simulation.
+
 If the *store/local* keyword is used, an internal fix will track bonds that
 break during the simulation. Whenever a bond breaks, data is processed
 and transferred to an internal fix labeled *fix_ID*. This allows the
@@ -267,13 +279,14 @@ file and must be redefined.
 
 The single() function of this bond style returns 0.0 for the energy of a 
 bonded interaction, since energy is not conserved in these dissipative potentials. 
-However, the single() function also calculates 4 additional quantities. The first 2 pertain 
-to bond lengths, including the reference state :math:`r_0` and equlibrium state :math:`r_{eq}`.
-The next 2 quantites (3-4) are the split elastic :math:`F_{el}`
-and viscoelastic :math:`H_d` forces respectively.
+However, the single() function also calculates additional quantities. The first 2 pertain 
+to bond lengths, including the reference state :math:`r_0` and a bonds previous length :math:`r_{n}`.
+The next :math:`N` quantites are the internal force h_j^{t-1} at the prevoius timestep 
+for each :math:`j`-th Maxwell element. The last two quantities are always the 
+split elastic :math:`F_{el}` and viscoelastic :math:`H_d` forces respectively.
 
 These extra quantity can be accessed by the
-:doc:`compute bond/local <compute_bond_local>` command as *b1*, *b2*, ..., *b4* \.
+:doc:`compute bond/local <compute_bond_local>` command as *b1*, *b2*, ... , *bN+2*, *bN+3*, *bN+4*  \.
 
 Restrictions
 """"""""""""
