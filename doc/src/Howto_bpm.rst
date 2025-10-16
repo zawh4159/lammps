@@ -128,6 +128,9 @@ The proper number of bond reference data to include in the reference file
 depends on the specific BPM bond style and can be determined from the table. 
 This includes the expected order and corresponding index as 
 accessed by the :doc:`compute bond/local <compute_bond_local>` command.
+The number of bond reference data remains fixed, except for :doc:`bpm/prony <bond_bpm_prony>`
+which depends on the of history variables specified by the bond style.
+If ``N`` history variables were declared then ``N+2`` reference data must be included.
 
 +-----------------------------------------------------+--------------------------------------------------------------------------------+-------------------+
 | :doc:`bpm/spring <bond_bpm_spring>`                 | :math:`r_0`                                                                    | b1                |
