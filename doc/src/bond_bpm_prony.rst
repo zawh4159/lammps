@@ -11,7 +11,7 @@ Syntax
    bond_style bpm/prony N keyword value attribute1 attribute2 ...
 
 * N = allocate history variables for N Mawell elements
-* optional keyword =  *store/local* or *overlay/pair* or *smooth* or *normalize* or *break* or *temp/shift*
+* optional keyword =  *store/local* or *read/reference* or *overlay/pair* or *smooth* or *normalize* or *break* or *temp/shift*
 
   .. parsed-literal::
 
@@ -27,6 +27,9 @@ Syntax
 
        *overlay/pair* value = *yes* or *no*
           bonded particles will still interact with pair forces
+
+       *read/reference* value = *filename*
+          reads bond history data from reference file
 
        *smooth* value = *yes* or *no*
           smooths bond forces near the breaking point
@@ -184,6 +187,15 @@ Additionally, if *temp/shift* is set to yes, a sixth coefficient
 must be provided:
 
 * :math:`a_T`             (unitless)
+
+If the *read/reference* keyword is used, bond data will restored from a
+prevoius reference point specified by a reference file that is read before
+the simulation, instead of initializing based on bonds current state. 
+This allows for the redeclaration of bond coefficients, without redefining bonds 
+reference state. Bond reference data is calculated by the single() function and can
+be accessed by the compute bond/local command. See the :doc:`Howto bpm<Howto_bpm>` for
+rules on formatting the reference file, including how to write reference files during a 
+simulation.
 
 If the *store/local* keyword is used, an internal fix will track bonds that
 break during the simulation. Whenever a bond breaks, data is processed
