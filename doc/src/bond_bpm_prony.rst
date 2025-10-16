@@ -267,13 +267,14 @@ file and must be redefined.
 
 The single() function of this bond style returns 0.0 for the energy of a 
 bonded interaction, since energy is not conserved in these dissipative potentials. 
-However, the single() function also calculates 4 additional quantities. The first 2 pertain 
-to bond lengths, including the reference state :math:`r_0` and equlibrium state :math:`r_{eq}`.
-The next 2 quantites (3-4) are the split elastic :math:`F_{el}`
-and viscoelastic :math:`H_d` forces respectively.
+However, the single() function also calculates additional quantities. The first 2 pertain 
+to bond lengths, including the reference state :math:`r_0` and a bonds previous length :math:`r_{n}`.
+The next :math:`N` quantites are the internal force h_j^{t-1} at the prevoius timestep 
+for each :math:`j`-th Maxwell element. The last two quantities are always the 
+split elastic :math:`F_{el}` and viscoelastic :math:`H_d` forces respectively.
 
 These extra quantity can be accessed by the
-:doc:`compute bond/local <compute_bond_local>` command as *b1*, *b2*, ..., *b4* \.
+:doc:`compute bond/local <compute_bond_local>` command as *b1*, *b2*, ... , *bN+2*, *bN+3*, *bN+4*  \.
 
 Restrictions
 """"""""""""
