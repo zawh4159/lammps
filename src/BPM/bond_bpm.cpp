@@ -350,7 +350,7 @@ void BondBPM::settings(int narg, char **arg)
   }
 
   // read ref file (if enabled)
-  read_reference(ref_filename); //if (comm->me == 0) 
+  if (comm->me == 0) read_reference(ref_filename); //
 
   // If bonds don't break and there's no overlay, can ignore special requirements
   if (break_flag == 0 && overlay_flag == 0)
