@@ -56,8 +56,8 @@ BondBPMProny::BondBPMProny(LAMMPS *_lmp) :
   update_flag = 1;
   id_fix_bond_history = utils::strdup("HISTORY_BPM_PRONY");
 
-  single_extra = 2;
-  svector = new double[2];
+  single_extra = 4;
+  svector = new double[4];
 
   comm_forward = 1;
   comm_reverse = 1;
@@ -494,10 +494,11 @@ void BondBPMProny::settings(int narg, char **arg)
 {
   nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 2;
   single_extra = nhistory + 2;
-  svector = new double[nhistory + 2];
 
-
-  //BondBPM::init_style();
+  // reallocate svector
+  if (svector) delete [] svector;
+  svector = new double[single_extra];
+  
   BondBPM::settings(narg, arg); //after this point ref flag is set number of history variable is updated
 
   int iarg; 
