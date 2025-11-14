@@ -338,6 +338,9 @@ void BondBPMProny::compute(int eflag, int vflag)
       fbond = k0[type] * (r0 - r);
     }
 
+     if (n == 1) {
+        printf("k0: %f | r0: %f | r: %f | force: %f\n",k[type],r0,r,fbond); 
+     }
     // rate-dependent part of bond force
     // Loop through Maxwell elements
     for (m = 0; m < tb->ninput; m++ ) {
