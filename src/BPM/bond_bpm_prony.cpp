@@ -247,7 +247,7 @@ void BondBPMProny::store_data()
 
 void BondBPMProny::compute(int eflag, int vflag)
 {
-  
+
   pre_compute();
 
   if (hybrid_flag) fix_bond_history->compress_history();
@@ -570,6 +570,8 @@ void BondBPMProny::read_restart(FILE *fp)
   BondBPM::read_restart(fp);
   read_restart_settings(fp);
   allocate();
+
+  //fix_bond_history->stored_flag = false;
   
   if (comm->me == 0) {
     utils::sfread(FLERR, &k0[1], sizeof(double), atom->nbondtypes, fp, nullptr, error);

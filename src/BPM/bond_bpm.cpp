@@ -70,6 +70,7 @@ BondBPM::BondBPM(LAMMPS *_lmp) :
   update_flag = 0;
   hybrid_flag = 0;
   reference_flag = 0;
+  restore_flag = 0;
   store_local_freq = 0;
 
   r0_max_estimate = 0.0;
@@ -527,6 +528,9 @@ void BondBPM::read_reference(char *file)
     }
   } 
 
+  //MPI_Bcast(&nentries, 1, MPI_INT, 0, world);
+  //MPI_Bcast(&nbonddata, 1, MPI_INT, 0, world);
+  
   printf("  read %i history variables for %i bonds\n",nbonddata-2,nentries);
 }
 
@@ -636,13 +640,30 @@ void BondBPM::process_new(int n, int i, int j)
 
 void BondBPM::pre_compute()
 {
+  if (comm->me==0) {
+    printf("precompute\n");
+  }
+  if (reference_flag) {
+    printf("yes ref\n");
+    if (!restore_flag) {
+      restore_flag = 1;
+
+      printf("Im in the restore block\n");
+      // Restore substyle-specific bond history data and save to atom arrays
+      restore_data();
+
+      // Rebuild bondstore array
+      fix_bond_history->post_neighbor();
+    }
+  }
+
+  //printf("%i\n",fix_bond_history->stored_flag);
   if (!fix_bond_history->stored_flag) {
     fix_bond_history->stored_flag = true;
 
     // if starting from reference point
-    if (reference_flag) {
-      // Restore substyle-specific bond history data and save to atom arrays
-      restore_data();
+    if (reference_flag) {    
+      // this has already been done
     } else {
       // Calculate substyle-specific bond history data and save to atom arrays
       store_data();
@@ -685,7 +706,9 @@ void BondBPM::restore_data()
   double **bondstore = fix_bond_history->bondstore;
   
   // error checks
-  if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for {} expected {}",force->bond_style,nhistory);
+  //if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for {} expected {}",force->bond_style,nhistory);
+  printf("netries: %i | nbonds %i\n",nentries,atom->nbonds);
+ 
 
   if ((nentries != atom->nbonds)) error->one(FLERR,"Incorrect number of bond entries in reference file {} expected {}",ref_filename,atom->nbonds);
 
@@ -734,6 +757,8 @@ void BondBPM::restore_data()
 
     }
   }
+
+  printf("Data restored\n");
 
 }
 

@@ -37,7 +37,7 @@ class BondBPM : public Bond {
  protected:
   double r0_max_estimate;
   double max_stretch;
-  int store_local_freq, nhistory, update_flag, hybrid_flag, reference_flag;
+  int store_local_freq, nhistory, update_flag, hybrid_flag, reference_flag, restore_flag;
 
   std::vector<int> leftover_iarg;
 
