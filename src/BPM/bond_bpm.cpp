@@ -361,16 +361,12 @@ void BondBPM::settings(int narg, char **arg)
     int me;
     MPI_Comm_rank(world, &me);
     if (me > 0) {
-      printf("nentries: %i nbonddata: %i \n", nentries, nbonddata);
       memory->create(bListdata, 2*nentries, "bond/bpm:bListdata");
       memory->create(bHistdata, nentries*(nbonddata-2), "bond/bpm:bHistdata");
     }
 
-    printf("post ref create\n");
-
     MPI_Bcast(bListdata, 2*nentries, MPI_INT, 0, world);
     MPI_Bcast(bHistdata, nentries*(nbonddata-2), MPI_DOUBLE, 0, world);
-    printf("post ref broadcast\n");
 
   }
  
@@ -717,15 +713,11 @@ void BondBPM::restore_data()
   
   // error checks
   //if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for {} expected {}",force->bond_style,nhistory);
-  printf("netries: %i | nbonds %li\n",nentries,atom->nbonds);
  
-
   if ((nentries != atom->nbonds)) error->one(FLERR,"Incorrect number of bond entries in reference file {} expected {}",ref_filename,atom->nbonds);
 
   int atomfile[nentries][2];
   double histfile[nentries][nbonddata-2];
-
-  printf("post create ints\n");
 
   //reshape history vectors to array
   for (int t = 0; t < nentries; t++) {
@@ -736,7 +728,6 @@ void BondBPM::restore_data()
     }
   }
 
-  printf("post reshape\n");
   // restore data to bondstore and atom arrays
   for (i = 0; i < atom->nlocal; i++) {
     for (m = 0; m < atom->num_bond[i]; m++) {
@@ -757,7 +748,6 @@ void BondBPM::restore_data()
         if ((iatom == atom->tag[i] && jatom == atom->tag[j]) || (iatom == atom->tag[j] && jatom == atom->tag[i])) {
           break;
         } else {
-          printf("Im trying to find iatom: %i and jatom %i\n",atom->tag[i],atom->tag[j]);
           error->one(FLERR,"Atom missing in reference file");
         }
       }
