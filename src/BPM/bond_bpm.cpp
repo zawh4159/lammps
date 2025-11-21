@@ -717,7 +717,7 @@ void BondBPM::restore_data()
   
   // error checks
   //if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for {} expected {}",force->bond_style,nhistory);
-  printf("netries: %i | nbonds %i\n",nentries,atom->nbonds);
+  printf("netries: %i | nbonds %li\n",nentries,atom->nbonds);
  
 
   if ((nentries != atom->nbonds)) error->one(FLERR,"Incorrect number of bond entries in reference file {} expected {}",ref_filename,atom->nbonds);
