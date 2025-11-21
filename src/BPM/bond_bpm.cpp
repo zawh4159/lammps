@@ -351,8 +351,29 @@ void BondBPM::settings(int narg, char **arg)
   }
 
   // read ref file (if enabled)
-  if (comm->me == 0) read_reference(ref_filename); //
+  if (reference_flag) {
+    if (comm->me == 0) read_reference(ref_filename); //
+    
+    // broadcast data to other processors
+    MPI_Bcast(&nentries, 1, MPI_INT, 0, world);
+    MPI_Bcast(&nbonddata, 1, MPI_INT, 0, world);
 
+    int me;
+    MPI_Comm_rank(world, &me);
+    if (me > 0) {
+      printf("nentries: %i nbonddata: %i \n", nentries, nbonddata);
+      memory->create(bListdata, 2*nentries, "bond/bpm:bListdata");
+      memory->create(bHistdata, nentries*(nbonddata-2), "bond/bpm:bHistdata");
+    }
+
+    printf("post ref create\n");
+
+    MPI_Bcast(bListdata, 2*nentries, MPI_INT, 0, world);
+    MPI_Bcast(bHistdata, nentries*(nbonddata-2), MPI_DOUBLE, 0, world);
+    printf("post ref broadcast\n");
+
+  }
+ 
   // If bonds don't break and there's no overlay, can ignore special requirements
   if (break_flag == 0 && overlay_flag == 0)
     ignore_special_flag = 1;
@@ -449,7 +470,6 @@ void BondBPM::read_restart(FILE *fp)
 
 void BondBPM::read_reference(char *file)
 {
-  if (!reference_flag) return;
 
   printf("\nReading reference file ...\n");
 
@@ -527,9 +547,6 @@ void BondBPM::read_reference(char *file)
                  t + 1, nentries, e.what(), line);
     }
   } 
-
-  //MPI_Bcast(&nentries, 1, MPI_INT, 0, world);
-  //MPI_Bcast(&nbonddata, 1, MPI_INT, 0, world);
   
   printf("  read %i history variables for %i bonds\n",nbonddata-2,nentries);
 }
@@ -640,30 +657,12 @@ void BondBPM::process_new(int n, int i, int j)
 
 void BondBPM::pre_compute()
 {
-  if (comm->me==0) {
-    printf("precompute\n");
-  }
-  if (reference_flag) {
-    printf("yes ref\n");
-    if (!restore_flag) {
-      restore_flag = 1;
 
-      printf("Im in the restore block\n");
-      // Restore substyle-specific bond history data and save to atom arrays
-      restore_data();
-
-      // Rebuild bondstore array
-      fix_bond_history->post_neighbor();
-    }
-  }
-
-  //printf("%i\n",fix_bond_history->stored_flag);
   if (!fix_bond_history->stored_flag) {
     fix_bond_history->stored_flag = true;
 
-    // if starting from reference point
     if (reference_flag) {    
-      // this has already been done
+      // this will be done later
     } else {
       // Calculate substyle-specific bond history data and save to atom arrays
       store_data();
@@ -671,6 +670,17 @@ void BondBPM::pre_compute()
 
     // Rebuild bondstore array
     fix_bond_history->post_neighbor();
+  }
+
+  if (reference_flag && !restore_flag) {
+    restore_flag = 1;
+
+    // Override substyle-specific bond history data from ref file
+    restore_data();
+
+    // Rebuild bondstore array
+    fix_bond_history->post_neighbor();
+      
   }
 
   if (hybrid_flag) fix_bond_history->compress_history();
@@ -715,6 +725,8 @@ void BondBPM::restore_data()
   int atomfile[nentries][2];
   double histfile[nentries][nbonddata-2];
 
+  printf("post create ints\n");
+
   //reshape history vectors to array
   for (int t = 0; t < nentries; t++) {
     atomfile[t][0] = bListdata[2*t];
@@ -724,6 +736,7 @@ void BondBPM::restore_data()
     }
   }
 
+  printf("post reshape\n");
   // restore data to bondstore and atom arrays
   for (i = 0; i < atom->nlocal; i++) {
     for (m = 0; m < atom->num_bond[i]; m++) {
@@ -744,6 +757,7 @@ void BondBPM::restore_data()
         if ((iatom == atom->tag[i] && jatom == atom->tag[j]) || (iatom == atom->tag[j] && jatom == atom->tag[i])) {
           break;
         } else {
+          printf("Im trying to find iatom: %i and jatom %i\n",atom->tag[i],atom->tag[j]);
           error->one(FLERR,"Atom missing in reference file");
         }
       }
