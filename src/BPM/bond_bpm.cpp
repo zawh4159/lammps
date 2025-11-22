@@ -712,7 +712,7 @@ void BondBPM::restore_data()
   double **bondstore = fix_bond_history->bondstore;
   
   // error checks
-  //if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for {} expected {}",force->bond_style,nhistory);
+  if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for {} expected {}",force->bond_style,nhistory);
  
   if ((nentries != atom->nbonds)) error->one(FLERR,"Incorrect number of bond entries in reference file {} expected {}",ref_filename,atom->nbonds);
 
@@ -762,7 +762,7 @@ void BondBPM::restore_data()
     }
   }
 
-  printf("Data restored\n");
+  if (comm->me == 0) printf("All reference file bond info was assigned\n");
 
 }
 
