@@ -756,9 +756,9 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
 
   svector[0] = r0;
   svector[1] = rn;
-
-  svector[nhistory + 1] = fel;
-  svector[nhistory + 2] = fint;
+ 
+  svector[nhistory] = fel;//fel;
+  svector[nhistory + 1] = fint;//fint;
 
   return 0.0;
 }
