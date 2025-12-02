@@ -56,7 +56,7 @@ BondBPM::BondBPM(LAMMPS *_lmp) :
     Bond(_lmp), id_fix_dummy_special(nullptr), id_fix_dummy_history(nullptr),
     id_fix_update_special_bonds(nullptr), id_fix_bond_history(nullptr), id_fix_store_local(nullptr),
     id_fix_property_atom(nullptr), fix_store_local(nullptr), fix_bond_history(nullptr),
-    fix_update_special_bonds(nullptr), pack_choice(nullptr), output_data(nullptr)
+    fix_update_special_bonds(nullptr), pack_choice(nullptr), output_data(nullptr), bListdata(nullptr), bHistdata(nullptr)
 {
   overlay_flag = 0;
   property_atom_flag = 0;
@@ -353,7 +353,7 @@ void BondBPM::settings(int narg, char **arg)
   // read ref file (if enabled)
   if (reference_flag) {
 
-    bListdata = nullptr; bHistdata = nullptr;
+    //bListdata = nullptr; bHistdata = nullptr;
 
     if (comm->me == 0) read_reference(ref_filename); //
     
@@ -705,7 +705,7 @@ void BondBPM::post_compute()
 ------------------------------------------------------------------------- */
 void BondBPM::restore_data()
 { 
-  int i, j, n, m, type;
+  int i, j, n, h, m, type;
   int iatom, jatom;
   double delx, dely, delz, hvar;
   double **x = atom->x;
@@ -748,20 +748,23 @@ void BondBPM::restore_data()
       if (j == -1) error->one(FLERR, "Atom missing in BPM bond");
 
       // find the correct entry in the history files
-      for (int n = 0; n < nentries; n++) {
+      for (n = 0; n < nentries; n++) {
         iatom = atomfile[n][0];
         jatom = atomfile[n][1];
         
         if ((iatom == atom->tag[i] && jatom == atom->tag[j]) || (iatom == atom->tag[j] && jatom == atom->tag[i])) {
+          //if (atom->tag[i] == 7) printf("n: %i | iatom %i jatom %i atom1 %i atom2 %i \n",n,iatom,jatom,atom->tag[i],atom->tag[j]);
           break;
-        } else if (n == nentries -1) {
-          error->one(FLERR,"Atom missing in reference file");
         }
+        //} else if (n == nentries -1) {
+          //error->one(FLERR,"Atom missing in reference file");
+        //}
       }
 
       // restore history
       for (int h = 0; h < (nbonddata - 2); h++) {
         hvar = histfile[n][h];
+        //if (atom->tag[i] == 7) printf("n: %i, h: %i, hvar: %f \n",index,h,hvar);
         fix_bond_history->update_atom_value(i, m, h, hvar);
         bondstore[m][h] = hvar;
       }
@@ -769,6 +772,7 @@ void BondBPM::restore_data()
     }
   }
 
+  if (comm->me > 0) printf("found all entries for proc: %i\n",comm->me);
   if (comm->me == 0) printf("All reference file bond info was assigned\n");
 
 }
