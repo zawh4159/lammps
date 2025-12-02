@@ -56,7 +56,7 @@ BondBPM::BondBPM(LAMMPS *_lmp) :
     Bond(_lmp), id_fix_dummy_special(nullptr), id_fix_dummy_history(nullptr),
     id_fix_update_special_bonds(nullptr), id_fix_bond_history(nullptr), id_fix_store_local(nullptr),
     id_fix_property_atom(nullptr), fix_store_local(nullptr), fix_bond_history(nullptr),
-    fix_update_special_bonds(nullptr), pack_choice(nullptr), output_data(nullptr), bListdata(nullptr), bHistdata(nullptr)
+    fix_update_special_bonds(nullptr), pack_choice(nullptr), output_data(nullptr)
 {
   overlay_flag = 0;
   property_atom_flag = 0;
