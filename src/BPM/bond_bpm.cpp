@@ -352,6 +352,9 @@ void BondBPM::settings(int narg, char **arg)
 
   // read ref file (if enabled)
   if (reference_flag) {
+
+    bListdata = nullptr; bHistdata = nullptr;
+
     if (comm->me == 0) read_reference(ref_filename); //
     
     // broadcast data to other processors
@@ -719,10 +722,14 @@ void BondBPM::restore_data()
   int atomfile[nentries][2];
   double histfile[nentries][nbonddata-2];
 
+  //int me;
+  //MPI_Comm_rank(world, &me);
+
   //reshape history vectors to array
   for (int t = 0; t < nentries; t++) {
     atomfile[t][0] = bListdata[2*t];
     atomfile[t][1] = bListdata[2*t + 1];
+    
     for (int d = 0; d < nbonddata - 2; d++) {
       histfile[t][d] = bHistdata[t*(nbonddata-2) + d];
     }
@@ -747,7 +754,7 @@ void BondBPM::restore_data()
         
         if ((iatom == atom->tag[i] && jatom == atom->tag[j]) || (iatom == atom->tag[j] && jatom == atom->tag[i])) {
           break;
-        } else {
+        } else if (n == nentries -1) {
           error->one(FLERR,"Atom missing in reference file");
         }
       }
