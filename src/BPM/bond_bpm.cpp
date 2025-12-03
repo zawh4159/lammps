@@ -707,10 +707,13 @@ void BondBPM::restore_data()
 { 
   int i, j, n, m, type;
   double delx, dely, delz, hvar;
-  int iatom, jatom, tagi, tagj;
+  int iatom, jatom, tagi, tagj, itag, jtag;
   double **x = atom->x;
   double dt = update->dt;
   int **bond_type = atom->bond_type;
+  int natoms = atom->natoms;
+  int nkeys, key, searchkey;
+  int *hashmap;
 
   double **bondstore = fix_bond_history->bondstore;
   
@@ -720,16 +723,30 @@ void BondBPM::restore_data()
   
   int atomfile[nentries][2];
   double histfile[nentries][nbonddata-2];
+  
+  nkeys = ((natoms-1)*natoms) + natoms; printf("made nkeys %i\n",nkeys);
+  memory->create(hashmap, nkeys, "bond/bpm:hashmap");
 
+  //printf("natoms: atom->natoms %li \n",atom->natoms);
   //reshape history vectors to array
   for (int t = 0; t < nentries; t++) {
-    atomfile[t][0] = bListdata[2*t];
-    atomfile[t][1] = bListdata[2*t + 1];
+    itag = bListdata[2*t];
+    jtag = bListdata[2*t + 1];
+
+    atomfile[t][0] = itag;
+    atomfile[t][1] = jtag;
     
     for (int d = 0; d < nbonddata - 2; d++) {
       histfile[t][d] = bHistdata[t*(nbonddata-2) + d];
     }
+
+    // for fast search use hashmap
+    key = std::min(itag,jtag)*natoms + std::max(itag,jtag);
+    //printf("key %i\n",key);
+    hashmap[key] = t;
   }
+
+  //printf("reshaped and hashed\n");
 
   // restore data to bondstore and atom arrays
   for (i = 0; i < atom->nlocal; i++) {
@@ -747,14 +764,17 @@ void BondBPM::restore_data()
       tagi = atom->tag[i];
       tagj = atom->tag[j];
 
+      searchkey = std::min(tagi,tagj)*natoms + std::max(tagi,tagj);
+      n = hashmap[searchkey];
+
       // find the correct entry in the history files
-      for (n = 0; n < nentries; n++) {
-        iatom = atomfile[n][0];
-        jatom = atomfile[n][1];
-        if ((iatom == tagi && jatom == tagj) || (iatom == tagj && jatom == tagi)) {
-          break;
-        }
-      }
+      //for (n = 0; n < nentries; n++) {
+      //  iatom = atomfile[n][0];
+      //  jatom = atomfile[n][1];
+      //  if ((iatom == tagi && jatom == tagj) || (iatom == tagj && jatom == tagi)) {
+      //    break;
+      //  }
+      //}
 
       // restore history
       for (int h = 0; h < (nbonddata - 2); h++) {
