@@ -34,6 +34,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <map>
 
 using namespace LAMMPS_NS;
 
@@ -711,9 +712,8 @@ void BondBPM::restore_data()
   double **x = atom->x;
   double dt = update->dt;
   int **bond_type = atom->bond_type;
-  int natoms = atom->natoms;
-  int nkeys, key, searchkey;
-  int *hashmap;
+  long int natoms = atom->natoms;
+  long int key, searchkey;
 
   double **bondstore = fix_bond_history->bondstore;
   
@@ -724,11 +724,9 @@ void BondBPM::restore_data()
   int atomfile[nentries][2];
   double histfile[nentries][nbonddata-2];
   
-  nkeys = ((natoms-1)*natoms) + natoms; printf("made nkeys %i\n",nkeys);
-  memory->create(hashmap, nkeys, "bond/bpm:hashmap");
+  // Need to store location of bond in hash table for fast retrieval when restoring
+  std::map<long int,long int> hashmap;
 
-  //printf("natoms: atom->natoms %li \n",atom->natoms);
-  //reshape history vectors to array
   for (int t = 0; t < nentries; t++) {
     itag = bListdata[2*t];
     jtag = bListdata[2*t + 1];
@@ -740,13 +738,15 @@ void BondBPM::restore_data()
       histfile[t][d] = bHistdata[t*(nbonddata-2) + d];
     }
 
-    // for fast search use hashmap
-    key = std::min(itag,jtag)*natoms + std::max(itag,jtag);
-    //printf("key %i\n",key);
-    hashmap[key] = t;
-  }
+    // Skip storing a key if atoms not owned
+    if (atom->map(itag) == -1 && atom->map(jtag) == -1) {
+      continue;
+    }
 
-  //printf("reshaped and hashed\n");
+    key = std::min(itag,jtag)*natoms + std::max(itag,jtag);
+    hashmap[key] = t;
+
+  }
 
   // restore data to bondstore and atom arrays
   for (i = 0; i < atom->nlocal; i++) {
@@ -766,15 +766,6 @@ void BondBPM::restore_data()
 
       searchkey = std::min(tagi,tagj)*natoms + std::max(tagi,tagj);
       n = hashmap[searchkey];
-
-      // find the correct entry in the history files
-      //for (n = 0; n < nentries; n++) {
-      //  iatom = atomfile[n][0];
-      //  jatom = atomfile[n][1];
-      //  if ((iatom == tagi && jatom == tagj) || (iatom == tagj && jatom == tagi)) {
-      //    break;
-      //  }
-      //}
 
       // restore history
       for (int h = 0; h < (nbonddata - 2); h++) {
