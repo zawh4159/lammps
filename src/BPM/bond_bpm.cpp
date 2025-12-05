@@ -704,6 +704,7 @@ void BondBPM::post_compute()
 /* ----------------------------------------------------------------------
   Restores bond data from a reference file
 ------------------------------------------------------------------------- */
+
 void BondBPM::restore_data()
 { 
   int i, j, n, m, type;
@@ -724,7 +725,7 @@ void BondBPM::restore_data()
   int atomfile[nentries][2];
   double histfile[nentries][nbonddata-2];
   
-  // Need to store location of bond in hash table for fast retrieval when restoring
+  // Need to store location of bond data in hash table for fast retrieval when restoring
   std::map<long int,long int> hashmap;
 
   for (int t = 0; t < nentries; t++) {
@@ -745,7 +746,6 @@ void BondBPM::restore_data()
 
     key = std::min(itag,jtag)*natoms + std::max(itag,jtag);
     hashmap[key] = t;
-
   }
 
   // restore data to bondstore and atom arrays
@@ -753,7 +753,6 @@ void BondBPM::restore_data()
     for (m = 0; m < atom->num_bond[i]; m++) {
       type = bond_type[i][m];
 
-      //printf("there are %i local atoms\n",atom->nlocal);
       //Skip if bond was turned off
       if (type < 0) continue;
 
@@ -777,11 +776,8 @@ void BondBPM::restore_data()
     }
   }
 
-  if (comm->me > 0) printf("found all entries for proc: %i\n",comm->me);
   if (comm->me == 0) printf("All reference file bond info was assigned\n");
-
 }
-
 
 /* ----------------------------------------------------------------------
    one method for every keyword bond bpm can output
