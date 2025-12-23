@@ -1,0 +1,58 @@
+units lj
+dimension 2
+boundary f f p
+
+atom_style      bond
+special_bonds   lj 0.0 1.0 1.0 coul 0.0 1.0 1.0
+newton          on off
+comm_modify     vel yes cutoff 2.6
+
+read_data       atoms.dat
+
+mass            1 1.0
+timestep        0.0001
+
+neighbor        0.3 bin
+special_bonds   lj 0.0 1.0 1.0 coul 1.0 1.0 1.0
+
+bond_style      bpm/prony 3 break no overlay/pair no smooth no
+bond_coeff      1 1 2.0 0 prony.table KEY nonlinear 0.4
+
+group           atom1 id 1
+
+run             0
+
+#fix             drag atom1 move linear -1 NULL NULL 
+
+
+compute         1 all property/local batom1 batom2 btype
+compute         2 all bond/local dist force
+
+compute         3 all reduce ave c_2[*] inputs local
+variable        stime equal time
+
+thermo          1
+thermo_style    custom step temp ebond etotal time c_3[1] c_3[2] 
+
+variable        blength equal c_3[1]
+variable        bforce equal c_3[2]
+
+dump            1 all custom 10 atomDump id x y z
+dump            2 all local 10 bondDump c_1[*] c_2[*]
+
+fix             printF all print 10 "${stime} ${blength} ${bforce}" file force_test.out screen no title ""
+
+
+fix             drag atom1 move linear -10 NULL NULL 
+run             2000
+
+unfix           drag
+run             1000
+
+#displace_atoms atom1 move -2.0001 0 0
+#run            1000
+
+
+
+
+
