@@ -13,21 +13,21 @@
 
 #ifdef BOND_CLASS
 // clang-format off
-BondStyle(bpm/spring,BondBPMSpring);
+BondStyle(bpm/prony,BondBPMProny);
 // clang-format on
 #else
 
-#ifndef LMP_BOND_BPM_SPRING_H
-#define LMP_BOND_BPM_SPRING_H
+#ifndef LMP_BOND_BPM_PRONY_H
+#define LMP_BOND_BPM_PRONY_H
 
 #include "bond_bpm.h"
 
 namespace LAMMPS_NS {
 
-class BondBPMSpring : public BondBPM {
+class BondBPMProny : public BondBPM {
  public:
-  BondBPMSpring(class LAMMPS *);
-  ~BondBPMSpring() override;
+  BondBPMProny(class LAMMPS *);
+  ~BondBPMProny() override;
   void compute(int, int) override;
   void coeff(int, char **) override;
   void init_style() override;
@@ -37,23 +37,38 @@ class BondBPMSpring : public BondBPM {
   void write_restart_settings(FILE *) override;
   void read_restart_settings(FILE *) override;
   double single(int, double, int, int, double &) override;
-  int pack_forward_comm(int, int *, double *, int, int *) override;
-  void unpack_forward_comm(int, int, double *) override;
-  int pack_reverse_comm(int, int, double *) override;
-  void unpack_reverse_comm(int, int *, double *) override;
+  void *extract(const char *, int &) override;
 
  protected:
-  double *k, *av, *ecrit, *gamma;
-  int smooth_flag, normalize_flag, volume_flag;
+  double *k0, *ecrit, *gamma, *aT;
+  int smooth_flag, normalize_flag, temperature_flag;
 
-  int index_vol, index_vol0, vol0_calculated, comm_stage, nmax;
   char *id_fix_property_bond;
-  double *dvol0;
+  double *aT_temp;
+  double dt_temp;
+
+  struct Table {
+   int ninput;
+   double r0;
+   double *kfile, *etafile, *expfile;
+   double *k, *eta, *expj;
+  };
+
+  int tabstyle, tablength, ntables, *tabindex;
+  Table *tables;
 
   void allocate();
   void store_data() override;
-  int calculate_vol();
-  void update_vol0();
+  //void restore_data() override;
+  double store_bond(int, int, int);
+
+  void null_table(Table *);
+  void free_table(Table *);
+  void read_table(Table *, char *, char *);
+  void bcast_table(Table *);
+  
+  void param_extract(Table *, char *);
+  void update_table(int);
 };
 
 }    // namespace LAMMPS_NS
