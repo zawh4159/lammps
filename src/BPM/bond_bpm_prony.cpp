@@ -373,7 +373,7 @@ void BondBPMProny::compute(int eflag, int vflag)
       Hn = term1 + term2;
       bondstore[n][m+2] = Hn;
     }
-    printf("Bondforce %f\n",fbond);
+    //printf("Bondforce %f\n",fbond);
     delvx = v[i1][0] - v[i2][0];
     delvy = v[i1][1] - v[i2][1];
     delvz = v[i1][2] - v[i2][2];
@@ -629,10 +629,14 @@ void BondBPMProny::read_restart(FILE *fp)
       memory->create(tb->kfile, tb->ninput, "bond:kfile");
       memory->create(tb->etafile, tb->ninput, "bond:etafile");
       memory->create(tb->expfile, tb->ninput, "bond:expfile");
+      memory->create(tb->alphfile, tb->ninput, "bond:alphfile");
       utils::sfread(FLERR, tb->kfile, sizeof(double), tb->ninput, fp, nullptr, error);
       utils::sfread(FLERR, tb->etafile, sizeof(double), tb->ninput, fp, nullptr, error);
 
-      for (int i = 0; i< tb->ninput; i++) tb->expfile[i] = 0.0; // this will be recomputed
+      for (int i = 0; i< tb->ninput; i++) {
+        tb->expfile[i] = 0.0; // this will be recomputed
+        tb->alphfile[i] = 0.0;
+      }
     }
 
     bcast_table(tb); // broadcast table to all processors
