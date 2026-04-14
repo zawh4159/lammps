@@ -50,8 +50,8 @@ class BondBPMProny : public BondBPM {
   struct Table {
    int ninput;
    double r0;
-   double *kfile, *etafile, *expfile;
-   double *k, *eta, *expj;
+   double *kfile, *etafile, *expfile, *alphfile;
+   double *k, *eta, *expj, *alph;
   };
 
   int tabstyle, tablength, ntables, *tabindex;

@@ -184,7 +184,7 @@ void BondBPMProny::store_data()
 {
   int i, j, n, m, type;
   double delx, dely, delz, r;
-  double k_temp, eta_temp, exp_j;
+  double k_temp, eta_temp, exp_j, alph_j, term0;
   double **x = atom->x;
   double dt = update->dt;
   int **bond_type = atom->bond_type;
@@ -228,8 +228,17 @@ void BondBPMProny::store_data()
         k_temp = tb->kfile[n];
         eta_temp = aT[type] * tb->etafile[n];
         
-        exp_j = exp(-dt * k_temp / eta_temp);
+        term0 = dt * k_temp / eta_temp;
+        exp_j = exp(-term0);
+
+        if (term0 < 1e-10) {
+          alph_j = 1; // evauluate manually in limit eta -> inf
+        } else {
+          alph_j = (1 - exp_j) / (dt * k_temp / eta_temp);
+        }
+
         tb->expfile[n] = exp_j;
+        tb->alphfile[n] = alph_j;
         dt_temp = dt;
 
         // Internal stress variable
@@ -255,7 +264,7 @@ void BondBPMProny::compute(int eflag, int vflag)
   int i1, i2, itmp, n, m, type;
   double delx, dely, delz, delvx, delvy, delvz;
   double e, rsq, r, r0, rn , rinv,  smooth, fbond, dot;
-  double k_temp, eta_temp, exp_j, Hn, term1, term2, term3;
+  double k_temp, eta_temp, exp_j, alph_j, Hn, term1, term2, term3;
 
   ev_init(eflag, vflag);
 
@@ -346,16 +355,17 @@ void BondBPMProny::compute(int eflag, int vflag)
       k_temp = tb->kfile[m];
       eta_temp = aT[type] * tb->etafile[m];
       exp_j = tb->expfile[m];
+      alph_j = tb->alphfile[m];
 
       // Get bond history variable
       Hn = bondstore[n][m+2];
 
       if (normalize_flag) {
         term1 = exp_j * Hn;
-        term2 =  k_temp * ((rn - r) / r0) * (1 - exp_j) / (dt * k_temp / eta_temp);
+        term2 =  k_temp * ((rn - r) / r0) * alph_j;
       } else {
         term1 = exp_j * Hn;
-        term2 =  k_temp * (rn - r) * (1 - exp_j) / (dt * k_temp / eta_temp);
+        term2 =  k_temp * (rn - r) * alph_j;
       }
       fbond += (term1 + term2);
       
@@ -363,7 +373,7 @@ void BondBPMProny::compute(int eflag, int vflag)
       Hn = term1 + term2;
       bondstore[n][m+2] = Hn;
     }
-
+    printf("Bondforce %f\n",fbond);
     delvx = v[i1][0] - v[i2][0];
     delvy = v[i1][1] - v[i2][1];
     delvz = v[i1][2] - v[i2][2];
@@ -675,7 +685,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   double rinv = 1.0 / r;
 
   double r0, rn;
-  double k_temp, eta_temp, exp_j, Hn, term1, term2;
+  double k_temp, eta_temp, exp_j, alph_j, Hn, term1, term2;
   double fel, fint;
   double Nb,numer,denom,lam;
 
@@ -703,16 +713,17 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
     k_temp = tb->kfile[m];
     eta_temp = aT[type] * tb->etafile[m];
     exp_j = tb->expfile[m];
+    alph_j = tb->alphfile[m];
 
     Hn = bondstore[n][m+2];
     svector[m+2] = Hn;
 
     if (normalize_flag) { 
       term1 = exp_j * Hn;
-      term2 =  k_temp * ((rn - r) / r0) * (1 - exp_j) / (dt * k_temp / eta_temp);
+      term2 =  k_temp * ((rn - r) / r0) * alph_j;
     } else {
       term1 = exp_j * Hn;
-      term2 =  k_temp * (rn - r) * (1 - exp_j) / (dt * k_temp / eta_temp);
+      term2 =  k_temp * (rn - r) * alph_j;
     }
 
     fforce += (term1 + term2);
@@ -769,8 +780,8 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
 
 void BondBPMProny::null_table(Table *tb)
 {
-  tb->kfile = tb->etafile = tb->expfile = nullptr;
-  tb->k = tb->eta = tb->expj = nullptr;
+  tb->kfile = tb->etafile = tb->expfile = tb->alphfile = nullptr;
+  tb->k = tb->eta = tb->expj = tb->alph = nullptr;
 
 }
 
@@ -781,10 +792,12 @@ void BondBPMProny::free_table(Table *tb)
   memory->destroy(tb->kfile);
   memory->destroy(tb->etafile);
   memory->destroy(tb->expfile);
+  memory->destroy(tb->alphfile);
 
   memory->destroy(tb->k);
   memory->destroy(tb->eta);
   memory->destroy(tb->expj);
+  memory->destroy(tb->alph);
 
 }
 
@@ -812,6 +825,7 @@ void BondBPMProny::read_table(Table *tb, char *file, char *keyword)
   memory->create(tb->kfile, tb->ninput, "bond:kfile");
   memory->create(tb->etafile, tb->ninput, "bond:etafile");
   memory->create(tb->expfile, tb->ninput, "bond:expfile");
+  memory->create(tb->alphfile, tb->ninput, "bond:alphfile");
   
   // read table values from file
 
@@ -829,6 +843,7 @@ void BondBPMProny::read_table(Table *tb, char *file, char *keyword)
       tb->kfile[i] = values.next_double(); 
       tb->etafile[i] = values.next_double();
       tb->expfile[i] = 0;
+      tb->alphfile[i] = 0;
       
       if (tb->kfile[i] <= 0) error->one(FLERR, "Bond parameter must positive non-zero");
 
@@ -836,7 +851,6 @@ void BondBPMProny::read_table(Table *tb, char *file, char *keyword)
       error->one(FLERR, "Error parsing table '{}' line {} of {}. {}\nLine was: {}", keyword,
                  i + 1, tb->ninput, e.what(), line);
     }
-
   }
 
   printf("  read bond coefficients for %i Maxwell elements\n\n",tb->ninput);
@@ -880,7 +894,7 @@ void BondBPMProny::param_extract(Table *tb, char *line)
  void BondBPMProny::update_table(int type)
 {   
   double dt = update->dt;
-  double k_temp, eta_temp, exp_j;
+  double k_temp, eta_temp, exp_j, alph_j, term0;
   const Table *tb = &tables[tabindex[type]];
 
     for (int m = 0; m < tb->ninput; m++ ) {
@@ -888,8 +902,18 @@ void BondBPMProny::param_extract(Table *tb, char *line)
       k_temp = tb->kfile[m];
       eta_temp = aT[type] * tb->etafile[m]; 
 
-      exp_j = exp(-dt * k_temp / eta_temp);
+      term0 = dt * k_temp / eta_temp;
+
+      exp_j = exp(-term0);
+
+      if (term0 < 1e-10) {
+        alph_j = 1; // evauluate manually in limit eta -> inf
+      } else {
+        alph_j = (1 - exp_j) / (dt * k_temp / eta_temp);
+      }
+
       tb->expfile[m] = exp_j;
+      tb->alphfile[m] = alph_j;
     }
   dt_temp = dt;
   aT_temp[type] = aT[type]; 
@@ -912,11 +936,13 @@ void BondBPMProny::bcast_table(Table *tb) // *UPDATED
     memory->create(tb->kfile, tb->ninput, "bond:kfile");
     memory->create(tb->etafile, tb->ninput, "bond:etafile");
     memory->create(tb->expfile, tb->ninput, "bond:expfile");
+    memory->create(tb->alphfile, tb->ninput, "bond:alphfile");
   }
 
   MPI_Bcast(tb->kfile, tb->ninput, MPI_DOUBLE, 0, world);
   MPI_Bcast(tb->etafile, tb->ninput, MPI_DOUBLE, 0, world);
   MPI_Bcast(tb->expfile, tb->ninput, MPI_DOUBLE, 0, world);
+  MPI_Bcast(tb->alphfile, tb->ninput, MPI_DOUBLE, 0, world);
 }
 
 /* ---------------------------------------------------------------------- */
