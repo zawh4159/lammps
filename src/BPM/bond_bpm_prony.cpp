@@ -502,7 +502,7 @@ void BondBPMProny::init_style()
 
 void BondBPMProny::settings(int narg, char **arg)
 {
-  nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 3;
+  nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 2;
   single_extra = nhistory + 3;
 
   // reallocate svector
