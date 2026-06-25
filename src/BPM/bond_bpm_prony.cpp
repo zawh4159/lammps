@@ -56,8 +56,8 @@ BondBPMProny::BondBPMProny(LAMMPS *_lmp) :
   update_flag = 1;
   id_fix_bond_history = utils::strdup("HISTORY_BPM_PRONY");
 
-  single_extra = 4;
-  svector = new double[4];
+  single_extra = 5;
+  svector = new double[5];
 
   comm_forward = 1;
   comm_reverse = 1;
@@ -502,8 +502,8 @@ void BondBPMProny::init_style()
 
 void BondBPMProny::settings(int narg, char **arg)
 {
-  nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 2;
-  single_extra = nhistory + 2;
+  nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 3;
+  single_extra = nhistory + 3;
 
   // reallocate svector
   if (svector) delete [] svector;
@@ -690,7 +690,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
 
   double r0, rn;
   double k_temp, eta_temp, exp_j, alph_j, Hn, term1, term2;
-  double fel, fint;
+  double fel, fint, fd;
   double Nb,numer,denom,lam;
 
   // rn, hn can be updated, so search bondlist vs. fix_bond_history->get_atom_value()
@@ -709,7 +709,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   r0 = bondstore[n][0];
   rn = bondstore[n][1];
    
-  fforce = 0;
+  fforce = 0; fd = 0;
   // Loop through Maxwell elements (rate-dependent)
   for (int m = 0; m < tb->ninput; m++ ) {
 
@@ -729,7 +729,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
       term1 = exp_j * Hn;
       term2 =  k_temp * (rn - r) * alph_j;
     }
-
+    fd += term1;
     fforce += (term1 + term2);
   }
   
@@ -772,8 +772,9 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   svector[0] = r0;
   svector[1] = rn;
  
-  svector[nhistory] = fel;//fel;
-  svector[nhistory + 1] = fint;//fint;
+  svector[nhistory] = fel;      //fel;
+  svector[nhistory + 1] = fint; //fint;
+  svector[nhistory + 2] = fd;
 
   return 0.0;
 }
