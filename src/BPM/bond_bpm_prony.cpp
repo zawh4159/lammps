@@ -689,7 +689,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   double rinv = 1.0 / r;
 
   double r0, rn;
-  double k_temp, eta_temp, exp_j, alph_j, Hn, term1, term2;
+  double k_temp, eta_temp, exp_j, alph_j, H, Hn, term1, term2;
   double fel, fint, fd;
   double Nb,numer,denom,lam;
 
@@ -709,7 +709,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   r0 = bondstore[n][0];
   rn = bondstore[n][1];
    
-  fforce = 0; fd = 0;
+  fforce = 0; fd = 0; H = 0;
   // Loop through Maxwell elements (rate-dependent)
   for (int m = 0; m < tb->ninput; m++ ) {
 
@@ -729,7 +729,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
       term1 = exp_j * Hn;
       term2 =  k_temp * (rn - r) * alph_j;
     }
-    fd += term1;
+    H += Hn;
     fforce += (term1 + term2);
   }
   
@@ -744,7 +744,8 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
     fforce += fel;
   }
 
-  fint = fforce - fel;
+  fint = fforce - fel;  //viscous force
+  fd   = H - fint;      //dissipated force
 
   double **x = atom->x;
   double **v = atom->v;
@@ -772,9 +773,9 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   svector[0] = r0;
   svector[1] = rn;
  
-  svector[nhistory] = fel;      //fel;
-  svector[nhistory + 1] = fint; //fint;
-  svector[nhistory + 2] = fd;
+  svector[nhistory] = fel;      //elastic force
+  svector[nhistory + 1] = fint; //total internal viscous force
+  svector[nhistory + 2] = fd;   //total dissipated force
 
   return 0.0;
 }
