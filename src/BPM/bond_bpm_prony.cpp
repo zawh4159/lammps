@@ -52,7 +52,7 @@ BondBPMProny::BondBPMProny(LAMMPS *_lmp) :
   ntables = 0;
   tables = nullptr;
 
-  nhistory = 2; // this gets updated post settings()
+  nhistory = 3; // this gets updated post settings()
   update_flag = 1;
   id_fix_bond_history = utils::strdup("HISTORY_BPM_PRONY");
 
@@ -115,6 +115,7 @@ double BondBPMProny::store_bond(int n, int i, int j)
   bondstore[n][0] = r;
   bondstore[n][1] = r;
   bondstore[n][2] = 0;
+  bondstore[n][3] = 0;
 
   if (i < atom->nlocal) {
     for (int m = 0; m < atom->num_bond[i]; m++) {
@@ -122,7 +123,8 @@ double BondBPMProny::store_bond(int n, int i, int j)
         fix_bond_history->update_atom_value(i, m, 0, r); // r0
         fix_bond_history->update_atom_value(i, m, 1, r); // rn
         fix_bond_history->update_atom_value(i, m, 2, 0); // En_dot
-        
+        fix_bond_history->update_atom_value(i, m, 3, 0); // E_cu
+
         type = bond_type[i][m];
         const Table *tb = &tables[tabindex[type]];
         for (int l = 0; l < tb->ninput; l++ ) {
@@ -136,7 +138,7 @@ double BondBPMProny::store_bond(int n, int i, int j)
         dt_temp = dt;
 
         // Internal stress variable
-        fix_bond_history->update_atom_value(i, m, l+2, 0);
+        fix_bond_history->update_atom_value(i, m, l+4, 0);
 
         }  
       }
@@ -149,6 +151,7 @@ double BondBPMProny::store_bond(int n, int i, int j)
         fix_bond_history->update_atom_value(j, m, 0, r); //r0
         fix_bond_history->update_atom_value(j, m, 1, r); //rn
         fix_bond_history->update_atom_value(j, m, 2, 0); //En_dot
+        fix_bond_history->update_atom_value(j, m, 3, 0); // E_cu
 
         type = bond_type[j][m];
         const Table *tb = &tables[tabindex[type]];
@@ -163,7 +166,7 @@ double BondBPMProny::store_bond(int n, int i, int j)
         dt_temp = dt;
 
         // Internal stress variable
-        fix_bond_history->update_atom_value(j, m, l+2, 0);     
+        fix_bond_history->update_atom_value(j, m, l+4, 0);     
 
         }
       }
@@ -213,10 +216,12 @@ void BondBPMProny::store_data()
       fix_bond_history->update_atom_value(i, m, 0, r); // r0
       fix_bond_history->update_atom_value(i, m, 1, r); // rn
       fix_bond_history->update_atom_value(i, m, 2, 0); // En_dot
+      fix_bond_history->update_atom_value(i, m, 3, 0); // E_cu
 
       bondstore[m][0] = r;
       bondstore[m][1] = r;
       bondstore[m][2] = 0;
+      bondstore[m][3] = 0;
 
       const Table *tb = &tables[tabindex[type]];
       if (r < EPSILON) {
@@ -244,8 +249,8 @@ void BondBPMProny::store_data()
         dt_temp = dt;
 
         // Internal stress variable
-        fix_bond_history->update_atom_value(i, m, n+2, 0);
-        bondstore[m][n+2] = 0;
+        fix_bond_history->update_atom_value(i, m, n+4, 0);
+        bondstore[m][n+4] = 0;
 
       }
 
@@ -266,7 +271,7 @@ void BondBPMProny::compute(int eflag, int vflag)
   int i1, i2, itmp, n, m, type;
   double delx, dely, delz, delvx, delvy, delvz;
   double e, rsq, r, r0, rn , rinv,  smooth, fbond, dot;
-  double k_temp, eta_temp, exp_j, alph_j, En_dot, hn, term1, term2, term3;
+  double k_temp, eta_temp, exp_j, alph_j, En_dot, Ediss_cu, Ed, hn, term1, term2, term3;
 
   ev_init(eflag, vflag);
 
@@ -361,7 +366,7 @@ void BondBPMProny::compute(int eflag, int vflag)
       alph_j = tb->alphfile[m];
 
       // Get bond history variable
-      hn = bondstore[n][m+2];
+      hn = bondstore[n][m+4];
       En_dot += ((hn * hn) / eta_temp); // add previous history to total previous dissipation rate
 
       if (normalize_flag) {
@@ -375,10 +380,16 @@ void BondBPMProny::compute(int eflag, int vflag)
       
       // Update bond history variable
       hn = term1 + term2;
-      bondstore[n][m+2] = hn;
+      bondstore[n][m+4] = hn;
     }
 
     bondstore[n][2]   = En_dot; // store total previous dissipation rate
+    
+    // update total cumulative dissipated energy
+    Ediss_cu = bondstore[n][3];
+    Ed = En_dot * dt;
+    Ediss_cu += Ed;
+    bondstore[n][3] = Ediss_cu;
 
     delvx = v[i1][0] - v[i2][0];
     delvy = v[i1][1] - v[i2][1];
@@ -508,8 +519,8 @@ void BondBPMProny::init_style()
 
 void BondBPMProny::settings(int narg, char **arg)
 {
-  nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 2;
-  single_extra = nhistory + 3;
+  nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 4;
+  single_extra = nhistory + 5;
 
   // reallocate svector
   if (svector) delete [] svector;
@@ -695,7 +706,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   double rinv = 1.0 / r;
 
   double r0, rn;
-  double k_temp, eta_temp, exp_j, alph_j, hn, hn1, Hn, En_dot, En1_dot, Ediss, term1, term2;
+  double k_temp, eta_temp, exp_j, alph_j, hn, hn1, Hn, En_dot, En1_dot, Ediss, Ediss_cu, term1, term2;
   double fel, fint, fd;
   double Nb,numer,denom,lam;
 
@@ -714,8 +725,8 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
    
   r0 = bondstore[n][0];
   rn = bondstore[n][1];
-   
-  fforce = 0; fd = 0; Hn = 0; En1_dot = 0;
+
+  fforce = 0; fd = 0; Hn = 0; En1_dot = 0; Ediss = 0;
   // Loop through Maxwell elements (rate-dependent)
   for (int m = 0; m < tb->ninput; m++ ) {
 
@@ -725,7 +736,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
     exp_j = tb->expfile[m];
     alph_j = tb->alphfile[m];
 
-    hn = bondstore[n][m+2];
+    hn = bondstore[n][m+4];
     svector[m+2] = hn;
 
     if (normalize_flag) { 
@@ -737,7 +748,7 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
     }
 
     hn1 = (term1 + term2);
-    En1_dot = (hn1 * hn1) / eta_temp;
+    En1_dot += (hn1 * hn1) / eta_temp;
 
     Hn += hn1;
     fforce += hn1;
@@ -758,7 +769,8 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
   fd   = Hn - fint;       //dissipated force
 
   En_dot = bondstore[n][2];
-  Ediss  = dt * (En_dot + En1_dot) / 2;
+  Ediss  = (dt * (En_dot + En1_dot)) / 2;
+  Ediss_cu = bondstore[n][3];
 
   double **x = atom->x;
   double **v = atom->v;
@@ -785,13 +797,13 @@ double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
 
   svector[0] = r0;
   svector[1] = rn;
- 
-  svector[nhistory]     = fel;   //elastic force
-  svector[nhistory + 1] = fint;  //total internal viscous force
-  svector[nhistory + 2] = fd;    //total dissipated force
-  svector[nhistory + 3] = En_dot;//total energy dissipation rate
-  svector[nhistory + 4] = Ediss; //total energy dissipated (in time interval dt)       
-
+  //svector[2] = hn;
+  svector[nhistory - 2] = fel;       //elastic force
+  svector[nhistory - 1] = fint;      //total internal viscous force
+  svector[nhistory - 0] = fd;        //total dissipated force
+  svector[nhistory + 1] = En_dot;    //total energy dissipation rate
+  svector[nhistory + 2] = Ediss;     //total energy dissipated (in time interval dt)
+  svector[nhistory + 3] = Ediss_cu;  // cumulative total dissipated energy       
   return 0.0;
 }
 
