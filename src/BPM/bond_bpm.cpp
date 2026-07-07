@@ -721,7 +721,7 @@ void BondBPM::restore_data()
   // error checks
   if ((nbonddata-2) != nhistory) error->one(FLERR,"Incorrect number of history variables for {} expected {}",force->bond_style,nhistory);
   if ((nentries != atom->nbonds)) error->one(FLERR,"Incorrect number of bond entries in reference file {} expected {}",ref_filename,atom->nbonds);
-  
+  //printf("nhistory %i",nhistory);
   int atomfile[nentries][2];
   double histfile[nentries][nbonddata-2];
   
@@ -766,8 +766,24 @@ void BondBPM::restore_data()
       searchkey = std::min(tagi,tagj)*natoms + std::max(tagi,tagj);
       n = hashmap[searchkey];
 
-      // restore history
+      // restore history !!! TEMP !!!
       for (int h = 0; h < (nbonddata - 2); h++) {
+        // was h < (nbonddata - 2)
+        /* 
+        if ((h == 2) || (h == 3)) {
+          fix_bond_history->update_atom_value(i, m, h, 0);
+          bondstore[m][h] = 0;
+        } else if (h == 4) {
+          hvar = histfile[n][2];
+          fix_bond_history->update_atom_value(i, m, h, hvar);
+          bondstore[m][h] = hvar;
+        } else {
+          hvar = histfile[n][h];
+          fix_bond_history->update_atom_value(i, m, h, hvar);
+          bondstore[m][h] = hvar;
+        }
+        */
+        // old
         hvar = histfile[n][h];
         fix_bond_history->update_atom_value(i, m, h, hvar);
         bondstore[m][h] = hvar;

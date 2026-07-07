@@ -265,7 +265,7 @@ void BondBPMProny::compute(int eflag, int vflag)
 {
 
   pre_compute();
-
+  //printf("post compute\n");
   if (hybrid_flag) fix_bond_history->compress_history();
 
   int i1, i2, itmp, n, m, type;
@@ -335,7 +335,7 @@ void BondBPMProny::compute(int eflag, int vflag)
     e = (r0 !=0.0) ? (r - r0) / r0 : 0.0;
 
     rn = bondstore[n][1]; // This needs to be after bonds have been initialized
-   
+    //("post get rn\n");
     // update bond length in bondstore
     bondstore[n][1] = r;
     
@@ -382,7 +382,7 @@ void BondBPMProny::compute(int eflag, int vflag)
       hn = term1 + term2;
       bondstore[n][m+4] = hn;
     }
-
+    //printf("post force\n");
     bondstore[n][2]   = En_dot; // store total previous dissipation rate
     
     // update total cumulative dissipated energy
@@ -390,7 +390,7 @@ void BondBPMProny::compute(int eflag, int vflag)
     Ed = En_dot * dt;
     Ediss_cu += Ed;
     bondstore[n][3] = Ediss_cu;
-
+    //printf("post diss calcs\n");
     delvx = v[i1][0] - v[i2][0];
     delvy = v[i1][1] - v[i2][1];
     delvz = v[i1][2] - v[i2][2];
@@ -520,7 +520,7 @@ void BondBPMProny::init_style()
 void BondBPMProny::settings(int narg, char **arg)
 {
   nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 4;
-  single_extra = nhistory + 5;
+  single_extra = nhistory + 4;
 
   // reallocate svector
   if (svector) delete [] svector;
@@ -694,7 +694,6 @@ void BondBPMProny::read_restart_settings(FILE *fp)
 double BondBPMProny::single(int type, double rsq, int i, int j, double &fforce)
 {
   if (type <= 0) return 0.0;
-
   const Table *tb = &tables[tabindex[type]];
   double dt = update->dt;
   tagint *tag = atom->tag;
