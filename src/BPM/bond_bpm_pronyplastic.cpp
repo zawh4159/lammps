@@ -538,7 +538,7 @@ void BondBPMPronyplastic::init_style()
 void BondBPMPronyplastic::settings(int narg, char **arg)
 {
   nhistory = utils::numeric(FLERR, arg[0], false, lmp) + 5;
-  single_extra = nhistory + 3;
+  single_extra = nhistory + 4;
 
   // reallocate svector
   if (svector) delete [] svector;
@@ -758,7 +758,7 @@ double BondBPMPronyplastic::single(int type, double rsq, int i, int j, double &f
     alph_j = tb->alphfile[m];
 
     hn = bondstore[n][m+4];
-    svector[m+2] = hn;
+    svector[m+3] = hn;
 
     if (normalize_flag) { 
       term1 = exp_j * hn;
@@ -818,13 +818,15 @@ double BondBPMPronyplastic::single(int type, double rsq, int i, int j, double &f
 
   svector[0] = r0;
   svector[1] = rn;
-  //svector[2] = hn;
-  svector[nhistory - 3] = fel;       //elastic force
-  svector[nhistory - 2] = fint;      //total internal viscous force
-  svector[nhistory - 1] = fd;        //total dissipated force
-  svector[nhistory + 0] = En_dot;    //total energy dissipation rate
-  svector[nhistory + 1] = Ediss;     //total energy dissipated (in time interval dt)
-  svector[nhistory + 2] = Ediss_cu;  // cumulative total dissipated energy       
+  svector[2] = ep;
+  //svector[3] = hn;
+   
+  svector[nhistory - 2] = fel;       //elastic force
+  svector[nhistory - 1] = fint;      //total internal viscous force
+  svector[nhistory + 0] = fd;        //total dissipated force
+  svector[nhistory + 1] = En_dot;    //total energy dissipation rate
+  svector[nhistory + 2] = Ediss;     //total energy dissipated (in time interval dt)
+  svector[nhistory + 3] = Ediss_cu;  // cumulative total dissipated energy       
   return 0.0;
 }
 
