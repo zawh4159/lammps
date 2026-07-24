@@ -112,7 +112,7 @@ double BondBPMKelvinVoigt::store_bond(int n, int i, int j)
   r = sqrt(delx * delx + dely * dely + delz * delz);
 
   bondstore[n][0] = r;
-  bondstore[n][1] = 0;
+  bondstore[n][1] = r;
 
   if (i < atom->nlocal) {
     for (int m = 0; m < atom->num_bond[i]; m++) {
@@ -144,7 +144,7 @@ double BondBPMKelvinVoigt::store_bond(int n, int i, int j)
     for (int m = 0; m < atom->num_bond[j]; m++) {
       if (atom->bond_atom[j][m] == tag[i]) { 
         fix_bond_history->update_atom_value(j, m, 0, r); //r0
-        fix_bond_history->update_atom_value(j, m, 1, 0); //rn
+        fix_bond_history->update_atom_value(j, m, 1, r); //rn
 
         type = bond_type[j][m];
         const Table *tb = &tables[tabindex[type]];
@@ -207,10 +207,10 @@ void BondBPMKelvinVoigt::store_data()
       r = sqrt(delx * delx + dely * dely + delz * delz);
 
       fix_bond_history->update_atom_value(i, m, 0, r); // r0
-      fix_bond_history->update_atom_value(i, m, 1, r); // rn
+      fix_bond_history->update_atom_value(i, m, 1, r); // fn
 
       bondstore[m][0] = r;
-      bondstore[m][1] = 0;
+      bondstore[m][1] = r;
 
       const Table *tb = &tables[tabindex[type]];
       if (r < EPSILON) {
@@ -239,7 +239,7 @@ void BondBPMKelvinVoigt::store_data()
 
         // Internal stress variable
         fix_bond_history->update_atom_value(i, m, n+2, 0);
-        bondstore[m][n+4] = 0;
+        bondstore[m][n+2] = 0;
 
       }
 
@@ -259,7 +259,7 @@ void BondBPMKelvinVoigt::compute(int eflag, int vflag)
 
   int i1, i2, itmp, n, m, type;
   double delx, dely, delz, delvx, delvy, delvz;
-  double e, rsq, r, r0, fn , rinv,  smooth, fbond, dot;
+  double e, rsq, r, rn, r0, fn, fn1, rinv,  smooth, fbond, dot;
   double k_temp, eta_temp, exp_j, alph_j, En_dot, Ediss_cu, Ed, hn, term0, term1, term2;
 
   ev_init(eflag, vflag);
@@ -323,7 +323,7 @@ void BondBPMKelvinVoigt::compute(int eflag, int vflag)
     r = sqrt(rsq);    
     e = (r0 !=0.0) ? (r - r0) / r0 : 0.0;
 
-    fn = bondstore[n][1]; // This needs to be after bonds have been initialized
+    //fn = bondstore[n][1]; // This needs to be after bonds have been initialized
     
     //bond break criterion
     if ((fabs(e) > ecrit[type]) && break_flag) {  
@@ -333,7 +333,7 @@ void BondBPMKelvinVoigt::compute(int eflag, int vflag)
     }
 
     rinv = 1.0 / r;
-    fbond = 0;
+    fn1 = 0;
 
     // rate-independent part of bond force
     //if (normalize_flag) {
@@ -353,31 +353,41 @@ void BondBPMKelvinVoigt::compute(int eflag, int vflag)
       alph_j = tb->alphfile[m];
 
       // Get bond history variable
-      hn = bondstore[n][m+2];
+      rn = bondstore[n][1];
 
-      if (normalize_flag) {
-        // bad
-        term1 = exp_j * hn;
-        term2 =  k_temp * ((r0 - r) / r0) * alph_j;
-      } else {
-        term0 = k_temp * (r0 - r);
-        term1 = exp_j * hn;
-        term2 = alph_j * fn;
-      }
-      fbond += (term0 + term1 - term2) / (1 - alph_j);
+      double u  = r  - r0;
+      double un = rn - r0;
+
+      double udot = (u - un) / dt;
+
+      fn1 += k_temp * u + eta_temp * udot;
+      //printf("bond force %4.4f\n",fn1);
+      //if (normalize_flag) {
+      //  // bad
+      //  term1 = exp_j * hn;
+      //  term2 =  k_temp * ((r0 - r) / r0) * alph_j;
+      //} else {
+      //  term0 = k_temp * (r - r0);
+      //  term1 = exp_j * hn;
+      //  term2 = alph_j * fn;
+      //}
+      //printf("nbondlist %i m %i hn %4.4f term0 %4.4f term1 %4.4f term2 %4.4f fn %4.4f\n",nbondlist,m,hn,term0,term1,term2,fn);
+      //fn1 += (term0 + term1 - term2) / (1 - alph_j);
       
       // Update bond history 
-      hn = term1 + (alph_j * (fbond - fn));
-      bondstore[n][m+2] = hn;
+      //hn = fn1 - term0;
+      bondstore[n][m+2] = fn1;
     }
 
     // update force history
-    bondstore[n][1]   = fbond;
+    bondstore[n][1]   = r;
 
     delvx = v[i1][0] - v[i2][0];
     delvy = v[i1][1] - v[i2][1];
     delvz = v[i1][2] - v[i2][2];
     dot = delx * delvx + dely * delvy + delz * delvz;
+    fbond = -fn1;
+    //printf("bond forces: term0 %4.4f term1 %4.4f term2 %4.4f fn1 %4.4f fbond %4.4f\n",term0,term1,term2,fn1,fbond);
     fbond -= gamma[type] * dot * rinv;
     fbond *= rinv;
 
@@ -706,7 +716,7 @@ double BondBPMKelvinVoigt::single(int type, double rsq, int i, int j, double &ff
   }
    
   r0 = bondstore[n][0];
-  fforce = bondstore[n][1];
+  fforce = -bondstore[n][2];
 
   //fforce = 0; fd = 0; Hn = 0; En1_dot = 0; Ediss = 0;
   // Loop through Maxwell elements (rate-dependent)
