@@ -118,7 +118,7 @@ double BondBPMKelvinVoigt::store_bond(int n, int i, int j)
     for (int m = 0; m < atom->num_bond[i]; m++) {
       if (atom->bond_atom[i][m] == tag[j]) { 
         fix_bond_history->update_atom_value(i, m, 0, r); // r0
-        fix_bond_history->update_atom_value(i, m, 1, r); // fn
+        fix_bond_history->update_atom_value(i, m, 1, r); // rn
 
         type = bond_type[i][m];
         const Table *tb = &tables[tabindex[type]];
@@ -207,7 +207,7 @@ void BondBPMKelvinVoigt::store_data()
       r = sqrt(delx * delx + dely * dely + delz * delz);
 
       fix_bond_history->update_atom_value(i, m, 0, r); // r0
-      fix_bond_history->update_atom_value(i, m, 1, r); // fn
+      fix_bond_history->update_atom_value(i, m, 1, r); // rn
 
       bondstore[m][0] = r;
       bondstore[m][1] = r;
@@ -342,44 +342,29 @@ void BondBPMKelvinVoigt::compute(int eflag, int vflag)
     //  fbond = k0[type] * (r0 - r);
     //}
 
-    // rate-dependent part of bond force
-    // Loop through Maxwell elements
+    // Loop through Kelvin-Voigt elements (not used)
     for (m = 0; m < tb->ninput; m++ ) {
 
       //Get element specific params
       k_temp = tb->kfile[m];
       eta_temp = aT[type] * tb->etafile[m];
-      exp_j = tb->expfile[m];
-      alph_j = tb->alphfile[m];
+      //exp_j = tb->expfile[m];
+      //alph_j = tb->alphfile[m];
 
       // Get bond history variable
       rn = bondstore[n][1];
 
       double u  = r  - r0;
       double un = rn - r0;
-
       double udot = (u - un) / dt;
 
       fn1 += k_temp * u + eta_temp * udot;
-      //printf("bond force %4.4f\n",fn1);
-      //if (normalize_flag) {
-      //  // bad
-      //  term1 = exp_j * hn;
-      //  term2 =  k_temp * ((r0 - r) / r0) * alph_j;
-      //} else {
-      //  term0 = k_temp * (r - r0);
-      //  term1 = exp_j * hn;
-      //  term2 = alph_j * fn;
-      //}
-      //printf("nbondlist %i m %i hn %4.4f term0 %4.4f term1 %4.4f term2 %4.4f fn %4.4f\n",nbondlist,m,hn,term0,term1,term2,fn);
-      //fn1 += (term0 + term1 - term2) / (1 - alph_j);
       
-      // Update bond history 
-      //hn = fn1 - term0;
+      // Update force history
       bondstore[n][m+2] = fn1;
     }
 
-    // update force history
+    // update bond history variable
     bondstore[n][1]   = r;
 
     delvx = v[i1][0] - v[i2][0];
@@ -387,7 +372,6 @@ void BondBPMKelvinVoigt::compute(int eflag, int vflag)
     delvz = v[i1][2] - v[i2][2];
     dot = delx * delvx + dely * delvy + delz * delvz;
     fbond = -fn1;
-    //printf("bond forces: term0 %4.4f term1 %4.4f term2 %4.4f fn1 %4.4f fbond %4.4f\n",term0,term1,term2,fn1,fbond);
     fbond -= gamma[type] * dot * rinv;
     fbond *= rinv;
 
@@ -513,7 +497,7 @@ void BondBPMKelvinVoigt::init_style()
 void BondBPMKelvinVoigt::settings(int narg, char **arg)
 {
   nhistory = 3;//utils::numeric(FLERR, arg[0], false, lmp) + 4;
-  single_extra = 2;//nhistory + 4;
+  single_extra = 3;//nhistory + 4;
 
   // reallocate svector
   if (svector) delete [] svector;
@@ -718,45 +702,6 @@ double BondBPMKelvinVoigt::single(int type, double rsq, int i, int j, double &ff
   r0 = bondstore[n][0];
   fforce = -bondstore[n][2];
 
-  //fforce = 0; fd = 0; Hn = 0; En1_dot = 0; Ediss = 0;
-  // Loop through Maxwell elements (rate-dependent)
-  //for (int m = 0; m < tb->ninput; m++ ) {
-
-    //Get element specific params
-    //k_temp = tb->kfile[m];
-    //eta_temp = aT[type] * tb->etafile[m];
-    //exp_j = tb->expfile[m];
-    //alph_j = tb->alphfile[m];
-
-    //hn = bondstore[n][m+4];
-    //svector[m+2] = hn;
-
-    //if (normalize_flag) { 
-    //  term1 = exp_j * hn;
-    //  term2 =  k_temp * ((rn - r) / r0) * alph_j;
-    //} else {
-    //  term1 = exp_j * hn;
-    //  term2 =  k_temp * (rn - r) * alph_j;
-    //}
-
-    //hn1 = (term1 + term2);
-    //En1_dot += (hn1 * hn1) / eta_temp;
-
-    //Hn += hn1;
-    //fforce += hn1;
-  //}
-  
-  //double e = (r0 !=0.0) ? (r - r0) / r0 : 0.0;
-
-  //rate-independent
-  //if (normalize_flag) {
-  //  fel = -k0[type] * e;
-  //  fforce += fel;
-  //} else {
-  //  fel = k0[type] * (r0 - r);
-  //  fforce += fel;
-  //}
-
   double **x = atom->x;
   double **v = atom->v;
   double delx = x[i][0] - x[j][0];
@@ -781,14 +726,9 @@ double BondBPMKelvinVoigt::single(int type, double rsq, int i, int j, double &ff
   // set single_extra quantities
 
   svector[0] = r0;
-  svector[1] = bondstore[n][1];
-  //svector[2] = hn;
-  //svector[nhistory - 2] = fel;       //elastic force
-  //svector[nhistory - 1] = fint;      //total internal viscous force
-  //svector[nhistory - 0] = fd;        //total dissipated force
-  //svector[nhistory + 1] = En_dot;    //total energy dissipation rate
-  //svector[nhistory + 2] = Ediss;     //total energy dissipated (in time interval dt)
-  //svector[nhistory + 3] = Ediss_cu;  // cumulative total dissipated energy       
+  svector[1] = r;
+  svector[2] = bondstore[n][1];
+ 
   return 0.0;
 }
 
