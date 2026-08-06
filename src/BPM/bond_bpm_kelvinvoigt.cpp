@@ -113,12 +113,14 @@ double BondBPMKelvinVoigt::store_bond(int n, int i, int j)
 
   bondstore[n][0] = r;
   bondstore[n][1] = r;
+  bondstore[n][3] = 0;
 
   if (i < atom->nlocal) {
     for (int m = 0; m < atom->num_bond[i]; m++) {
       if (atom->bond_atom[i][m] == tag[j]) { 
         fix_bond_history->update_atom_value(i, m, 0, r); // r0
         fix_bond_history->update_atom_value(i, m, 1, r); // rn
+        fix_bond_history->update_atom_value(i, m, 3, 0); // En_dot
 
         type = bond_type[i][m];
         const Table *tb = &tables[tabindex[type]];
@@ -145,6 +147,7 @@ double BondBPMKelvinVoigt::store_bond(int n, int i, int j)
       if (atom->bond_atom[j][m] == tag[i]) { 
         fix_bond_history->update_atom_value(j, m, 0, r); //r0
         fix_bond_history->update_atom_value(j, m, 1, r); //rn
+        fix_bond_history->update_atom_value(j, m, 3, 0); //En_dot
 
         type = bond_type[j][m];
         const Table *tb = &tables[tabindex[type]];
@@ -208,9 +211,11 @@ void BondBPMKelvinVoigt::store_data()
 
       fix_bond_history->update_atom_value(i, m, 0, r); // r0
       fix_bond_history->update_atom_value(i, m, 1, r); // rn
+      fix_bond_history->update_atom_value(i, m, 3, 0); // En_dot
 
       bondstore[m][0] = r;
       bondstore[m][1] = r;
+      bondstore[m][3] = 0;
 
       const Table *tb = &tables[tabindex[type]];
       if (r < EPSILON) {
@@ -357,15 +362,20 @@ void BondBPMKelvinVoigt::compute(int eflag, int vflag)
       double u  = r  - r0;
       double un = rn - r0;
       double udot = (u - un) / dt;
+      double fv = eta_temp * udot;
+      double fe = k_temp * u;
 
-      fn1 += k_temp * u + eta_temp * udot;
+      En_dot = ((fv * fv) / eta_temp);
+
+      fn1 += fe + fv;
       
       // Update force history
       bondstore[n][m+2] = fn1;
     }
 
-    // update bond history variable
+    // update bond history variables
     bondstore[n][1]   = r;
+    bondstore[n][3]   = En_dot;
 
     delvx = v[i1][0] - v[i2][0];
     delvy = v[i1][1] - v[i2][1];
@@ -496,8 +506,8 @@ void BondBPMKelvinVoigt::init_style()
 
 void BondBPMKelvinVoigt::settings(int narg, char **arg)
 {
-  nhistory = 3;//utils::numeric(FLERR, arg[0], false, lmp) + 4;
-  single_extra = 3;//nhistory + 4;
+  nhistory = 4;//utils::numeric(FLERR, arg[0], false, lmp) + 4;
+  single_extra = 5;//nhistory + 4;
 
   // reallocate svector
   if (svector) delete [] svector;
@@ -700,7 +710,28 @@ double BondBPMKelvinVoigt::single(int type, double rsq, int i, int j, double &ff
   }
    
   r0 = bondstore[n][0];
+  rn = bondstore[n][1];
   fforce = -bondstore[n][2];
+
+  double u  = r  - r0;
+  double un = rn - r0;
+  double udot = (u - un) / dt;
+  double fv = eta_temp * udot;
+
+  // Loop through Maxwell elements (rate-dependent)
+  for (int m = 0; m < tb->ninput; m++ ) {
+
+    //Get element specific params
+    k_temp = tb->kfile[m];
+    eta_temp = aT[type] * tb->etafile[m];
+    exp_j = tb->expfile[m];
+    alph_j = tb->alphfile[m];
+
+    En1_dot += (fv * fv) / eta_temp;
+  }
+
+  En_dot = bondstore[n][3];
+  Ediss = (dt* (En_dot + En1_dot)) / 2;
 
   double **x = atom->x;
   double **v = atom->v;
@@ -725,9 +756,11 @@ double BondBPMKelvinVoigt::single(int type, double rsq, int i, int j, double &ff
 
   // set single_extra quantities
 
-  svector[0] = r0;
-  svector[1] = r;
-  svector[2] = bondstore[n][1];
+  svector[0] = r0;              // r0
+  svector[1] = r;               // rn
+  svector[2] = bondstore[n][1]; // fforce
+  svector[3] = En_dot;          // dissipation rate
+  svector[4] = Ediss;           // total instantaneous dissipated energy
  
   return 0.0;
 }
